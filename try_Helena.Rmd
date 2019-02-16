@@ -109,8 +109,7 @@ test$random_forest_pred = predict(object = random_forest, newdata = test, type =
 columns = c("zip_bins","numords","dollars","last","version1","owntaxprod","upgraded","zip801","zip804")
 tuning_random_forest <- tuneRF(x = subset(train, select = columns),
               y = train$res1,
-              ntreeTry = 500)
-mtry_opt <- tuning_random_forest[,"mtry"][which.min(tuning_random_forest[,"OOBError"])]
+              ntreeTry = 500,doBest = TRUE)
 ```
 
 
