@@ -88,7 +88,7 @@ test$decision_tree_pred = predict(object = decision_tree, newdata = test)
 bagging = bagging(formula = res1 ~  zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, data = train, nbagg=25, control=rpart.control(minsplit=2, cp=0.001))
 test$bagging_pred = predict(object = bagging, newdata = test, type = 'prob')
 ```
-
+/
 
 
 ```{r}
