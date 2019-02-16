@@ -81,18 +81,37 @@ decision_tree = rpart(formula = res1 ~ zip_bins + numords + dollars + last + ver
 ```
 
 ```{r}
-test$decision_tree_pred = predict(object = decision_tree, newdata = test, type = 'prob')
+decision_tree_pred = predict(decision_tree, pred_data = test, type = 'prob')
+test$decision_tree_pred = decision_tree_pred
 ```
 
 ## Bagging
 ```{r}
-bagging = bagging(formula = res1 ~  zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, data = train, nbagg=25, control=rpart.control(minsplit=2, cp=0.001))
+bagging = bagging(formula = res1 ~  zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, data = train, nbagg=25)
 test$bagging_pred = predict(object = bagging, newdata = test, type = 'prob')
 ```
 
+## treebag cross-validation
 ```{r}
 ctrl = trainControl(method = 'cv', number = 5)
 treebag = train(res1 ~ zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, data = train, method = 'treebag', trControl = ctrl)
+```
+
+```{r}
+result <- logistic(
+  train, 
+  rvar = "res1", 
+  evar = c(
+    "zip_bins", "numords", "dollars", "last", 
+    "version1", "owntaxprod", "upgraded", "zip801", "zip804"
+  ), 
+  lev = "Yes", 
+  int = c("version1:last", "numords:version1")
+)
+
+pred <- predict(result, pred_data = test, conf = 0.9)
+
+test$pred_logit_solution <- pred$Prediction
 ```
 
 
