@@ -51,19 +51,37 @@ intuit75k <- readr::read_rds(file.path(radiant.data::find_dropbox(), "MGTA455-20
 
 ```{r}
 library(tidyverse)
+library(rpart)
 ```
 
 
 ```{r}
 library(radiant)
 ## change variable types for 5 factor variables
-intuit75k <- mutate_at(intuit75k, .vars = vars(zip_bins, bizflag, version1, owntaxprod, upgraded), .funs = funs(as.factor))
+
+intuit75k <- intuit75k %>% 
+  mutate(zip801 = ifelse(zip == "00801", "Yes", "No"),
+         zip804 = ifelse(zip == "00804", "Yes", "No"))
+
+intuit75k <- mutate_at(intuit75k, .vars = vars(zip_bins, bizflag, version1, owntaxprod, upgraded, zip801, zip804), .funs = funs(as.factor))
+
+class(intuit75k$zip801)
 
 train = intuit75k %>%
   filter(training == 1)
   
 test = intuit75k %>%
   filter(training == 0)
+```
+
+Decision Tree (loosen the control)
+```{r}
+decision_tree = rpart(formula = res1 ~  zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, data = train, method = 'class', control=rpart.control(minsplit=2, minbucket=1, cp=0.001))
+```
+
+```{r}
+decision_tree_pred = predict(object = decision_tree, newdata = test, type = 'class')
+test$decision_tree_pred <- decision_tree_pred
 ```
 
 
