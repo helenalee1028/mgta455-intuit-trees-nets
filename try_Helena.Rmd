@@ -82,13 +82,12 @@ decision_tree = rpart(formula = res1 ~ zip_bins + numords + dollars + last + ver
 ```
 
 ```{r}
-decision_tree_pred = predict(decision_tree, pred_data = test, type = 'prob')
-test$decision_tree_pred = decision_tree_pred
+test$decision_tree_pred = predict(decision_tree, newdata = test, type = 'prob')
 ```
 
 ## Bagging
 ```{r}
-bagging = bagging(formula = res1 ~  zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, data = train, nbagg=25)
+bagging = bagging(formula = res1 ~  zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, data = train, nbagg=50)
 test$bagging_pred = predict(object = bagging, newdata = test, type = 'prob')
 ```
 
@@ -109,7 +108,9 @@ test$random_forest_pred = predict(object = random_forest, newdata = test, type =
 columns = c("zip_bins","numords","dollars","last","version1","owntaxprod","upgraded","zip801","zip804")
 tuning_random_forest <- tuneRF(x = subset(train, select = columns),
               y = train$res1,
-              ntreeTry = 500,doBest = TRUE)
+              ntreeTry = 500, doBest = TRUE)
+
+test$tuning_random_forest_pred = predict(object = tuning_random_forest, newdata = test, type = 'prob')
 ```
 
 
@@ -155,7 +156,7 @@ model_eval <- function(dat, vars){
 mail_cost <- 1.41
 margin_revenue <- 60
 breakeven_rate <- mail_cost/margin_revenue
-vars_vec = c('decision_tree_pred','bagging_pred','random_forest_pred')
+vars_vec = c('decision_tree_pred','bagging_pred','random_forest_pred','tuning_random_forest_pred')
 model_eval(test,vars_vec)
 ```
 
