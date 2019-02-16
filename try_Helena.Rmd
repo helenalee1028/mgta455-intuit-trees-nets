@@ -53,6 +53,7 @@ intuit75k <- readr::read_rds(file.path(radiant.data::find_dropbox(), "MGTA455-20
 library(tidyverse)
 library(rpart)
 library(ipred)
+library(caret)
 ```
 
 
@@ -80,7 +81,7 @@ decision_tree = rpart(formula = res1 ~ zip_bins + numords + dollars + last + ver
 ```
 
 ```{r}
-test$decision_tree_pred = predict(object = decision_tree, newdata = test)
+test$decision_tree_pred = predict(object = decision_tree, newdata = test, type = 'prob')
 ```
 
 ## Bagging
@@ -88,7 +89,12 @@ test$decision_tree_pred = predict(object = decision_tree, newdata = test)
 bagging = bagging(formula = res1 ~  zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, data = train, nbagg=25, control=rpart.control(minsplit=2, cp=0.001))
 test$bagging_pred = predict(object = bagging, newdata = test, type = 'prob')
 ```
-/
+
+```{r}
+ctrl = trainControl(method = 'cv', number = 5)
+treebag = train(res1 ~ zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, data = train, method = 'treebag', trControl = ctrl)
+```
+
 
 
 ```{r}
