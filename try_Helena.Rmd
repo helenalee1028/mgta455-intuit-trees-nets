@@ -52,11 +52,11 @@ intuit75k <- readr::read_rds(file.path(radiant.data::find_dropbox(), "MGTA455-20
 ```{r}
 library(tidyverse)
 library(rpart)
+library(ipred)
 ```
 
 
 ```{r}
-library(radiant)
 ## change variable types for 5 factor variables
 
 intuit75k <- intuit75k %>% 
@@ -76,12 +76,65 @@ test = intuit75k %>%
 
 Decision Tree (loosen the control)
 ```{r}
-decision_tree = rpart(formula = res1 ~  zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, data = train, method = 'class', control=rpart.control(minsplit=2, minbucket=1, cp=0.001))
+decision_tree = rpart(formula = res1 ~ zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, data = train, control=rpart.control(minsplit=2, minbucket=1, cp=0.001))
 ```
 
 ```{r}
-decision_tree_pred = predict(object = decision_tree, newdata = test, type = 'class')
-test$decision_tree_pred <- decision_tree_pred
+test$decision_tree_pred = predict(object = decision_tree, newdata = test)
+```
+
+## Bagging
+```{r}
+bagging = bagging(formula = res1 ~  zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, data = train, nbagg=25, control=rpart.control(minsplit=2, cp=0.001))
+test$bagging_pred = predict(object = bagging, newdata = test, type = 'prob')
+```
+
+
+
+```{r}
+model_eval <- function(dat, vars){
+  
+  # calculate expected scaled profits and ROME
+  
+  eval_df <- as.data.frame(matrix(NA, ncol = 6, nrow = length(vars)))
+  colnames(eval_df) <- c("var","nr_mail", "rep_rate_w2", "nr_resp_w2", "profit", "ROME")
+  
+  
+  for (i in 1:length(vars)){
+    
+    var <- vars[i]
+    
+    mailto <- ifelse(pull(dat, !!var) > 2 * breakeven_rate, "TRUE", "FALSE") # decide whether to mail or not
+    mailto_rate <- mean(mailto == "TRUE")
+    nr_mail <- mailto_rate * (801821 - 38487) #target size
+    
+    resp <- pull(dat, "res1") # extract respondents
+    
+    rep_rate_w1 <- sum(resp == "Yes" & mailto == "TRUE")/sum(mailto=="TRUE") # response rate among targeted audience
+    rep_rate_w2 <- rep_rate_w1 * 0.5
+    nr_resp_w2 <- rep_rate_w2 * nr_mail # response customers among targeted audience
+    
+    sum_cost <- mail_cost * nr_mail
+    revenue <- margin_revenue * nr_resp_w2
+    profit <- revenue - sum_cost
+    ROME <- profit/sum_cost
+    
+    perf_vec <- c(var, nr_mail, rep_rate_w2, nr_resp_w2, profit, ROME)
+    
+    eval_df[i,] <- perf_vec
+  }
+  
+  return(eval_df) 
+}
+
+```
+
+```{r}
+mail_cost <- 1.41
+margin_revenue <- 60
+breakeven_rate <- mail_cost/margin_revenue
+
+model_eval(test,'decision_tree_pred')
 ```
 
 
