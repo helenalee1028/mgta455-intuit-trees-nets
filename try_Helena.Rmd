@@ -54,6 +54,7 @@ library(tidyverse)
 library(rpart)
 library(ipred)
 library(caret)
+library(randomForest)
 ```
 
 
@@ -97,23 +98,20 @@ ctrl = trainControl(method = 'cv', number = 5)
 treebag = train(res1 ~ zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, data = train, method = 'treebag', trControl = ctrl)
 ```
 
+## Random Forest
 ```{r}
-result <- logistic(
-  train, 
-  rvar = "res1", 
-  evar = c(
-    "zip_bins", "numords", "dollars", "last", 
-    "version1", "owntaxprod", "upgraded", "zip801", "zip804"
-  ), 
-  lev = "Yes", 
-  int = c("version1:last", "numords:version1")
-)
-
-pred <- predict(result, pred_data = test, conf = 0.9)
-
-test$pred_logit_solution <- pred$Prediction
+random_forest = randomForest(formula = res1 ~  zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, data = train)
+test$random_forest_pred = predict(object = random_forest, newdata = test, type = 'prob')
 ```
 
+## tuning random forest
+```{r}
+columns = c("zip_bins","numords","dollars","last","version1","owntaxprod","upgraded","zip801","zip804")
+tuning_random_forest <- tuneRF(x = subset(train, select = columns),
+              y = train$res1,
+              ntreeTry = 500)
+mtry_opt <- tuning_random_forest[,"mtry"][which.min(tuning_random_forest[,"OOBError"])]
+```
 
 
 ```{r}
@@ -158,8 +156,8 @@ model_eval <- function(dat, vars){
 mail_cost <- 1.41
 margin_revenue <- 60
 breakeven_rate <- mail_cost/margin_revenue
-
-model_eval(test,'decision_tree_pred')
+vars_vec = c('decision_tree_pred','bagging_pred','random_forest_pred')
+model_eval(test,vars_vec)
 ```
 
 
