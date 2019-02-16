@@ -1,0 +1,141 @@
+---
+title: "Helena"
+author: "Wenrui_Li"
+date: "2/18/2019"
+output: html_document
+---
+
+```{r r_setup, include = FALSE}
+## initial settings
+knitr::opts_chunk$set(
+  comment = NA,
+  echo = TRUE,
+  error = TRUE,
+  cache = FALSE,
+  message = FALSE,
+  dpi = 144,
+  warning = FALSE
+)
+
+## width to use when printing tables etc.
+options(
+  width = 250,
+  scipen = 100,
+  max.print = 5000,
+  stringsAsFactors = FALSE
+)
+
+## load radiant packages if needed
+if (!exists("r_environment")) library(radiant)
+```
+
+<style>
+.table {
+  width: auto;
+}
+ul, ol {
+  padding-left: 18px;
+}
+pre, code, pre code {
+  overflow: auto;
+  white-space: pre;
+  word-wrap: normal;
+  background-color: #ffffff;
+}
+</style>
+```{r}
+## loading the data. Note that data must be loaded from the data/
+## in the rstudio project directory
+intuit75k <- readr::read_rds(file.path(radiant.data::find_dropbox(), "MGTA455-2019/data/intuit75k.rds"))
+```
+
+```{r}
+library(tidyverse)
+```
+
+
+```{r}
+library(radiant)
+## change variable types for 5 factor variables
+intuit75k <- mutate_at(intuit75k, .vars = vars(zip_bins, bizflag, version1, owntaxprod, upgraded), .funs = funs(as.factor))
+
+train = intuit75k %>%
+  filter(training == 1)
+  
+test = intuit75k %>%
+  filter(training == 0)
+```
+
+
+```{r}
+y_train = train$res1
+X_train = train[,-13]
+y_test = test$res1
+X_test = test[,-13]
+```
+
+
+```{python}
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
+from sklearn.naive_bayes import GaussianNB
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neural_network import MLPClassifier
+```
+
+
+```{python}
+models = [GaussianNB(),
+          SVC(random_state=5),
+          RandomForestClassifier(random_state=5, n_estimators=10),
+          MLPClassifier(random_state=5)]
+```
+
+
+```{python}
+grid_data = [{},
+              {'kernel': ['rbf', 'sigmoid'], 'C': [0.1, 1, 10, 100], 'random_state': [5]},
+              {'n_estimators': [10, 50, 100],
+               'criterion': ['gini', 'entropy'],
+               'max_depth': [None, 10, 50, 100],
+               'min_samples_split': [2, 5, 10],
+               'random_state': [5]},
+              {'hidden_layer_sizes': [10, 50, 100],
+               'activation': ['identity', 'logistic', 'tanh', 'relu'],
+               'solver': ['lbfgs', 'sgd', 'adam'],
+               'learning_rate': ['constant', 'invscaling', 'adaptive'],
+               'max_iter': [200, 400, 800],
+               'random_state': [5]}]
+```
+
+
+```{python}
+print(models)
+```
+```{python}
+models_grid = list()
+for i in range(0,len(models)):
+    print(i)
+    grid = GridSearchCV(estimator = models[i], param_grid = grid_data[i], scoring='f1').fit(X_train, y_train) 
+    # there is some problem here. cannot finish
+    print(grid.best_params_)
+    model = grid.best_estimator_
+    models_grid.append(model)
+```
+```{r}
+X_train = as.matrix(X_train)
+X_train
+```
+
+```{python}
+
+y_train = train['res1']
+X_train = train[,-13]
+y_test = test$res1
+X_test = test[,-13]
+```
+```{python}
+print(train)
+```
+
