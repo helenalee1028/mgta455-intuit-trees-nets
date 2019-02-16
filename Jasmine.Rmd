@@ -34,9 +34,59 @@ intuit75k_test <- store(intuit75k_test, pred, name = "pred_crtree")
 Decision tree in rpart.
 ```{r}
 # train tree
-decision_cart <- rpart(res1 ~zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804 , data = intuit75k_train,method = "class",parms = list(loss = matrix(c(0,1.41,60,0),nrow = 2)))
+ctrl = rpart::rpart.control(cp = 0.001)
+loss = matrix(c(0,1.41,60,0),nrow = 2)
 
-printcp(decision_cart)
-plotcp(decision_cart)
-summary(decision_cart)
+result <- rpart(res1 ~zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804 , 
+                data = intuit75k_train, 
+                control = ctrl,
+                method = "class",
+                parms = list(loss = loss),
+                minsplit = 2)
+
+printcp(result)
+#plotcp(decision_cart)
+#summary(decision_cart)
+
+pred <- tbl_df(predict(result, newdata = intuit75k_test, type = "prob"))
+#print(pred, n = 10)
+
+intuit75k_test$`pred_rpart` <- pred$Yes
+
+#intuit75k_test <- store(intuit75k_test, pred, name = "pred_rpart")
+```
+ 
+Random forest -- ranger
+
+```{r}
+#library(ranger)
+#train.idx <- sample(nrow(intuit75k_train), 2/3 * nrow(intuit75k_train))
+#intuit75k_train.train <- intuit75k_train[train.idx, ]
+#intuit75k_train.test <- intuit75k_train[-train.idx, ]
+
+
+result <- ranger(res1 ~zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804,
+               data = intuit75k_train,
+               #test_data = intuit75k_train.test,
+               num.trees = 50,
+               mtry = 4,
+               probability = TRUE)
+       
+pred <- predict(result, data = intuit75k_test)
+intuit75k_test$`pred_ranf` <- pred$predictions
+```
+
+Boost decision tree- gbm
+
+```{r}
+library(gbm)
+result <- gbm(res1 ~zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804,
+              data = intuit75k_train,
+              distribution = "gaussian",
+              n.trees = 100,
+              shrinkage = 0.01, 
+              interaction.depth = 4)
+
+pred <- predict(result, newdata = intuit75k_test,n.trees = )
+intuit75k_test$`pred_ranf` <- pred$predictions
 ```
