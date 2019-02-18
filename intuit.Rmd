@@ -105,3 +105,183 @@ Long running cross-validation should be put in a separate R-code file that can b
 load("data/cross-validation-results.rds")
 ```
 
+
+
+### Evaluation metrics from last assginment, with logit regression 
+
+```{r}
+## loading the data. Note that data must be loaded from Dropbox/MGTA455-2019/data
+intuit75k <- readr::read_rds(file.path(radiant.data::find_dropbox(), "MGTA455-2019/data/intuit75k.rds"))
+
+## change variable types for 5 factor variables
+intuit75k <- mutate_at(intuit75k, .vars = vars(zip_bins, bizflag, version1, owntaxprod, upgraded), .funs = funs(as_factor))
+
+### create 00801 and 00804 bin
+
+intuit75k <- intuit75k %>% 
+  mutate(zip801 = ifelse(zip == "00801", "Yes", "No"),
+         zip804 = ifelse(zip == "00804", "Yes", "No"))
+
+
+###split the data into train and test.
+
+intuit75k_train <- intuit75k %>%
+  filter(training == 1) 
+
+intuit75k_test <- intuit75k %>%
+  filter(training == 0)
+
+```
+
+#### Logistic Regression
+```{r}
+
+result <- logistic(
+  intuit75k_train, 
+  rvar = "res1", 
+  evar = c(
+    "zip_bins", "numords", "dollars", "last", 
+    "version1", "owntaxprod", "upgraded", "zip801", "zip804"
+  ), 
+  lev = "Yes", 
+  int = c("version1:last", "numords:version1")
+)
+
+pred <- predict(result, pred_data = intuit75k_test, conf = 0.9)
+
+intuit75k_test$pred_logit_solution <- pred$Prediction
+intuit75k_test$pred_logitlb <- pred$`5%`
+```
+
+#### Evaluation Functions
+```{r}
+cm <- function(dat, vars){
+  
+  cm_df <- as.data.frame(matrix(NA, ncol = 3, nrow = length(vars)))
+  colnames(cm_df) <- c("var", "auc", "tpr")
+  
+  for (i in 1:length(vars)){
+    
+    var <- vars[i]
+    probs <- pull(dat, !!var)
+    resp <- pull(dat, "res1")
+    
+    mailto <- ifelse(pull(dat, !!var) > breakeven_rate, "TRUE", "FALSE") # decide whether to mail or not
+    
+    tpr <- sum(resp == "Yes" & mailto == "TRUE")/sum(resp == "Yes")
+    auc <- ModelMetrics::auc(ifelse(resp=="Yes",1,0), probs)
+    
+    cm_vec <- c(var, auc, tpr)
+    cm_df[i,] <- cm_vec
+  }
+  return(cm_df)
+}
+
+model_eval <- function(dat, vars){
+  
+  # calculate expected scaled profits and ROME
+  
+  eval_df <- as.data.frame(matrix(NA, ncol = 6, nrow = length(vars)))
+  colnames(eval_df) <- c("var","nr_mail", "rep_rate_w2", "nr_resp_w2", "profit", "ROME")
+  
+  
+  for (i in 1:length(vars)){
+    
+    var <- vars[i]
+    
+    mailto <- ifelse(pull(dat, !!var) > 2 * breakeven_rate, "TRUE", "FALSE") # decide whether to mail or not
+    mailto_rate <- mean(mailto == "TRUE")
+    nr_mail <- mailto_rate * (801821 - 38487) #target size
+    
+    resp <- pull(dat, "res1") # extract respondents
+    
+    rep_rate_w1 <- sum(resp == "Yes" & mailto == "TRUE")/sum(mailto=="TRUE") # response rate among targeted audience
+    rep_rate_w2 <- rep_rate_w1 * 0.5
+    nr_resp_w2 <- rep_rate_w2 * nr_mail # response customers among targeted audience
+    
+    sum_cost <- mail_cost * nr_mail
+    revenue <- margin_revenue * nr_resp_w2
+    profit <- revenue - sum_cost
+    ROME <- profit/sum_cost
+    
+    perf_vec <- c(var, nr_mail, rep_rate_w2, nr_resp_w2, profit, ROME)
+    
+    eval_df[i,] <- perf_vec
+  }
+  
+  return(eval_df) 
+}
+
+
+# this function is to plot cumulative gain and cumulative lift charts
+lift_gain_plot <- function(dat, vars){
+  
+  lift_gain_df <- as.data.frame(matrix(NA, ncol = 4))
+  colnames(lift_gain_df) <- c("resp_decile", "cumulative_gain", "cumulative_lift", "var")
+  
+  for (i in 1:length(vars)){
+    
+    var <- vars[i]
+    
+    probs <- pull(dat, !!var)
+    resp <- pull(dat, "res1")
+    
+    lg_dat <- data.frame(probs, resp)
+    lg_dat <- lg_dat %>% 
+      mutate(resp_decile = xtile(probs, n = 10, rev = T)) %>% 
+      group_by(resp_decile) %>% 
+      summarise(n_customer = n(),
+                n_buyer = sum(resp == "Yes")) %>%
+      mutate(cum_customer = cumsum(n_customer),
+             cum_buyer = cumsum(n_buyer),
+             cumulative_lift = (cum_buyer/cum_customer)/overall_val_resp,
+             cumulative_gain = cum_buyer/sum(n_buyer)) %>% 
+      select(resp_decile, cumulative_gain, cumulative_lift)
+    
+    lg_dat[,var] <- var
+    
+    lift_gain_df <- rbind(lift_gain_df, setNames(lg_dat, names(lift_gain_df)))
+  }
+  
+  lift_gain_df <- lift_gain_df[-1,] #remove first null row
+  lift_gain_df$prop_customer <- rep(seq(0.1,1, 0.1),length(vars))
+  
+  # plot cumulative lift
+  p1 <- lift_gain_df %>% 
+    ggplot(aes(x = prop_customer, y = cumulative_lift, group = var)) + 
+    geom_point(aes(color = var)) + geom_line(aes(color = var))+
+    geom_hline(yintercept = 1, color = "black")
+  
+  
+  
+  # plot cumulative gain
+  p2 <- lift_gain_df %>% 
+    ggplot(aes(x = prop_customer, y = cumulative_gain, group = var)) + 
+    geom_point(aes(color = var)) + geom_line(aes(color = var))+
+    geom_line(aes(y = prop_customer), color = "black")
+  
+  gridExtra::grid.arrange(p1,p2, nrow = 2)
+  
+}
+
+
+```
+
+#### Compare the 2 predictions from last class
+
+```{r fig.height=10}
+mail_cost <- 1.41
+margin_revenue <- 60
+breakeven_rate <- mail_cost/margin_revenue
+
+overall_val_resp <- mean(intuit75k_test$res1 == "Yes")
+
+vars_vec <- c("pred_logit_solution", "pred_logitlb")
+model_eval(intuit75k_test, vars_vec)
+
+cm(intuit75k_test, vars_vec)
+
+lift_gain_plot(intuit75k_test, vars_vec)
+
+```
+
