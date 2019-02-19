@@ -34,9 +34,25 @@ intuit75k_test <- store(intuit75k_test, pred, name = "pred_crtree")
 Decision tree in rpart.
 ```{r}
 # train tree
-decision_cart <- rpart(res1 ~zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804 , data = intuit75k_train,method = "class",parms = list(loss = matrix(c(0,1.41,60,0),nrow = 2)))
+ctrl = rpart::rpart.control(cp = 0.001)
+loss = matrix(c(0,1.41,60,0),nrow = 2)
 
-printcp(decision_cart)
-plotcp(decision_cart)
-summary(decision_cart)
+result <- rpart(res1 ~zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804 , 
+                data = intuit75k_train, 
+                control = ctrl,
+                method = "class",
+                parms = list(loss = loss),
+                minsplit = 2)
+
+printcp(result)
+#plotcp(decision_cart)
+#summary(decision_cart)
+
+pred <- tbl_df(predict(result, newdata = intuit75k_test, type = "prob"))
+#print(pred, n = 10)
+
+intuit75k_test$`pred_rpart` <- pred$Yes
+
+#intuit75k_test <- store(intuit75k_test, pred, name = "pred_rpart")
 ```
+ 
