@@ -80,13 +80,48 @@ Boost decision tree- gbm
 
 ```{r}
 library(gbm)
-result <- gbm(res1 ~zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804,
+## change res1 to 1,0
+intuit75k_train$res1 <- ifelse(intuit75k_train$res1 =='Yes',1,0)
+intuit75k_test$res1 <- ifelse(intuit75k_test$res1 =='Yes',1,0)
+result <- gbm(res1 ~zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, ## zip801/804 must be factor rather than character here
               data = intuit75k_train,
-              distribution = "gaussian",
+              distribution = "bernoulli",
               n.trees = 100,
               shrinkage = 0.01, 
               interaction.depth = 4)
 
-pred <- predict(result, newdata = intuit75k_test,n.trees = )
-intuit75k_test$`pred_ranf` <- pred$predictions
+pred <- predict(result, newdata = intuit75k_test,n.trees =100,
+                type="response" ## this will return probability
+                )
+intuit75k_test$`pred_gbm` <- pred
 ```
+
+Xgboost - xgboost
+
+```{r}
+library(caret)
+## create a new data set for xgboost
+temp <- dummyVars(~zip_bins +sex ,data = intuit75k)
+pred <- predict(temp, newdata = intuit75k)
+intuit75k_xgb <- cbind(intuit75k,pred)
+
+
+intuit75k_xgb <- intuit75k_xgb %>%
+  select(-c('zip_bins.1','sex.Female')) %>%
+  mutate(upgraded = as.numeric(upgraded),
+         owntaxprod =as.numeric(upgraded),
+         version1 = as.numeric(version1),
+         bizflag =as.numeric(bizflag)) %>%
+  mutate(zip801 = ifelse(zip801 == 'Yes',1,0),
+         zip804 = ifelse(zip804 == 'Yes',1,0),
+         res1 = ifelse(res1 == 'Yes',1,0))
+#summary(intuit75k_xgb)
+
+intuit75k_xgb_train <- intuit75k %>%
+  filter(training == 1) 
+
+intuit75k_xgb_test <- intuit75k %>%
+  filter(training == 0)
+```
+Train xgb model
+
