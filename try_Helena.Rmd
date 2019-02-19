@@ -55,6 +55,7 @@ library(rpart)
 library(ipred)
 library(caret)
 library(randomForest)
+library(pROC)
 ```
 
 
@@ -95,6 +96,7 @@ test$bagging_pred = predict(object = bagging, newdata = test, type = 'prob')
 ```{r}
 ctrl = trainControl(method = 'cv', number = 5)
 treebag = train(res1 ~ zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, data = train, method = 'treebag', trControl = ctrl)
+test$treebag_pred = predict(object = treebag, newdata = test, type = 'prob')$`Yes`
 ```
 
 ## Random Forest
@@ -112,6 +114,49 @@ tuning_random_forest <- tuneRF(x = subset(train, select = columns),
 
 test$tuning_random_forest_pred = predict(object = tuning_random_forest, newdata = test, type = 'prob')
 ```
+
+```{r}
+# Establish a list of possible values for mtry, nodesize and sampsize
+mtry <- seq(4, ncol(train) * 0.8, 2)
+nodesize <- seq(3, 8, 2)
+sampsize <- nrow(credit_train) * c(0.7, 0.8)
+
+# Create a data frame containing all combinations 
+hyper_grid <- expand.grid(mtry = mtry, nodesize = nodesize, sampsize = sampsize)
+
+# Create an empty vector to store OOB error values
+oob_err <- c()
+
+# Write a loop over the rows of hyper_grid to train the grid of models
+for (i in 1:nrow(hyper_grid)) {
+
+    # Train a Random Forest model
+    model <- randomForest(formula = res1 ~ zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, 
+                          data = credit_train,
+                          mtry = hyper_grid$mtry[i],
+                          nodesize = hyper_grid$nodesize[i],
+                          sampsize = hyper_grid$sampsize[i])
+                          
+    # Store OOB error for the model                      
+    oob_err[i] <- model$err.rate[nrow(model$err.rate), "OOB"]
+}
+
+# Identify optimal set of hyperparmeters based on OOB error
+opt_i <- which.min(oob_err)
+print(hyper_grid[opt_i,])
+
+
+roc_obj <- roc(category, prediction)
+auc(roc_obj)
+## Area under the curve: 0.825
+roc_df <- data.frame(
+  TPR=rev(roc_obj$sensitivities), 
+  FPR=rev(1 - roc_obj$specificities), 
+  labels=roc_obj$response, 
+  scores=roc_obj$predictor)
+
+```
+
 
 
 ```{r}
@@ -156,7 +201,7 @@ model_eval <- function(dat, vars){
 mail_cost <- 1.41
 margin_revenue <- 60
 breakeven_rate <- mail_cost/margin_revenue
-vars_vec = c('decision_tree_pred','bagging_pred','random_forest_pred','tuning_random_forest_pred')
+vars_vec = c('decision_tree_pred','bagging_pred','treebag_pred','random_forest_pred','tuning_random_forest_pred')
 model_eval(test,vars_vec)
 ```
 
