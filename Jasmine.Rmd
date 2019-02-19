@@ -115,13 +115,39 @@ intuit75k_xgb <- intuit75k_xgb %>%
   mutate(zip801 = ifelse(zip801 == 'Yes',1,0),
          zip804 = ifelse(zip804 == 'Yes',1,0),
          res1 = ifelse(res1 == 'Yes',1,0))
+
+intuit75k_xgb <- intuit75k_xgb %>%
+  select(-zip)
 #summary(intuit75k_xgb)
 
-intuit75k_xgb_train <- intuit75k %>%
+intuit75k_xgb_train <- intuit75k_xgb %>%
   filter(training == 1) 
 
-intuit75k_xgb_test <- intuit75k %>%
+intuit75k_xgb_test <- intuit75k_xgb %>%
   filter(training == 0)
 ```
 Train xgb model
+```{r}
+library(xgboost)
+X_train = model.matrix(res1~.,intuit75k_xgb_train)[,-13]
+y_train = intuit75k_xgb_train$res1
 
+X_test = model.matrix(res1~.,intuit75k_xgb_test)[,-13]
+y_test = intuit75k_xgb_test$res1
+result <- xgboost(data = X_train,label = y_train,
+              nrounds = 100 ,
+              objective = "binary:logistic",
+              max_depth = 10, eta = 0.1,
+              eval_metric ="auc"
+  
+)
+probs = predict(result , X_test)
+intuit75k_xgb_test$`pred_xgb` <- probs
+intuit75k_test$`pred_xgb` <- probs
+```
+
+Neural Network
+```{r}
+library(nnet)
+
+```
