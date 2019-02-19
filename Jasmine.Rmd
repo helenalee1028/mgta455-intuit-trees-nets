@@ -75,3 +75,15 @@ result <- ranger(res1 ~zip_bins + numords + dollars + last + version1 + owntaxpr
 pred <- predict(result, data = intuit75k_test)
 intuit75k_test$`pred_ranf` <- pred$predictions
 ```
+
+Boost decision tree- gbm
+
+```{r}
+result <- gbm(res1 ~zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804,
+              distribution = "gaussian",
+              n.trees = 10000,
+              shrinkage = 0.01, 
+              interaction.depth = 4)
+
+
+```
