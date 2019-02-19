@@ -56,3 +56,22 @@ intuit75k_test$`pred_rpart` <- pred$Yes
 #intuit75k_test <- store(intuit75k_test, pred, name = "pred_rpart")
 ```
  
+Random forest -- ranger
+
+```{r}
+#library(ranger)
+#train.idx <- sample(nrow(intuit75k_train), 2/3 * nrow(intuit75k_train))
+#intuit75k_train.train <- intuit75k_train[train.idx, ]
+#intuit75k_train.test <- intuit75k_train[-train.idx, ]
+
+
+result <- ranger(res1 ~zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804,
+               data = intuit75k_train,
+               #test_data = intuit75k_train.test,
+               num.trees = 50,
+               mtry = 4,
+               probability = TRUE)
+       
+pred <- predict(result, data = intuit75k_test)
+intuit75k_test$`pred_ranf` <- pred$predictions
+```
