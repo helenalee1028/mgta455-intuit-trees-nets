@@ -56,6 +56,7 @@ library(ipred)
 library(caret)
 library(randomForest)
 library(pROC)
+library(gbm)
 ```
 
 
@@ -68,7 +69,7 @@ intuit75k <- intuit75k %>%
 
 intuit75k <- mutate_at(intuit75k, .vars = vars(zip_bins, bizflag, version1, owntaxprod, upgraded, zip801, zip804), .funs = funs(as.factor))
 
-class(intuit75k$zip801)
+class(intuit75k$res1)
 
 train = intuit75k %>%
   filter(training == 1)
@@ -114,6 +115,64 @@ tuning_random_forest <- tuneRF(x = subset(train, select = columns),
 
 test$tuning_random_forest_pred = predict(object = tuning_random_forest, newdata = test, type = 'prob')
 ```
+
+```{r}
+train$res1 <- ifelse(train$res1 == "Yes", 1, 0)
+test$res1 <- ifelse(test$res1 == "Yes", 1, 0)
+gbm = gbm(formula = res1 ~  zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, distribution = 'bernoulli', data = train, n.trees = 100)
+test$gbm_pred = predict.gbm(object = gbm, newdata = test, type = 'response',n.trees = 100)
+test$res1 <- ifelse(test$res1 == 1, 'Yes', 'No')
+```
+
+```{r}
+## estimating on the dvd data
+dvd_wrk <- readr::read_rds(file.path(find_dropbox(), "MGTA455-2019/data/dvd.rds"))
+dvd_wrk$buy <- ifelse(dvd_wrk$buy == "yes", 1, 0)
+n.trees <- 1000
+
+result <- gbm(
+  buy ~ .,
+  data = dvd_wrk,
+  distribution = "bernoulli",
+  n.trees = n.trees,
+  interaction.depth = 2,
+  shrinkage = 0.01,
+  keep.data = FALSE,
+  cv.folds = 5
+)
+
+## get variable importance
+vimp <- summary(result, plotit = FALSE, n.trees = n.trees)
+visualize(vimp, type = "bar", xvar = "var", yvar = "rel.inf")
+
+## estimating on the bbb
+bbb_wrk <- readr::read_rds(file.path(find_dropbox(), "MGTA455-2019/data/bbb.rds"))
+bbb_wrk <- mutate(
+  bbb_wrk,
+  buyer = ifelse(buyer == "yes", 1, 0),
+  gender = ifelse(gender == "M", 1, 0)
+)
+n.trees <- 1000
+
+result <- gbm(
+  buyer ~ gender + last + total + purch + child + youth + cook + do_it + reference + art + geog,
+  data = bbb_wrk,
+  distribution = "bernoulli",
+  n.trees = n.trees,
+  interaction.depth = 2,
+  shrinkage = 0.01,
+  keep.data = FALSE,
+  cv.folds = 5
+)
+
+## get variable importance
+vimp <- summary(result, plotit = FALSE, n.trees = n.trees)
+visualize(vimp, type = "bar", xvar = "var", yvar = "rel.inf")
+
+
+```
+
+
 
 ```{r}
 # Establish a list of possible values for mtry, nodesize and sampsize
@@ -207,6 +266,7 @@ model_eval(test,vars_vec)
 
 
 ```{r}
+model_eval(test,'gbm_pred')
 y_train = train$res1
 X_train = train[,-13]
 y_test = test$res1
