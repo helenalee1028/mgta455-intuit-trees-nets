@@ -159,4 +159,3 @@ probs <- predict(result,intuit75k_test,type='raw')
 intuit75k_test$`pred_nnet` <- probs
 ```
 
-what is that
