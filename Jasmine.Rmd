@@ -64,7 +64,6 @@ Random forest -- ranger
 #intuit75k_train.train <- intuit75k_train[train.idx, ]
 #intuit75k_train.test <- intuit75k_train[-train.idx, ]
 
-
 result <- ranger(res1 ~zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804,
                data = intuit75k_train,
                #test_data = intuit75k_train.test,
@@ -149,5 +148,13 @@ intuit75k_test$`pred_xgb` <- probs
 Neural Network
 ```{r}
 library(nnet)
+result <- nnet(res1 ~zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804,
+               size = 2,
+               data = intuit75k_train,
+               rang = 0.1,
+               decay = 0.5,
+               maxit = 200)
 
+probs <- predict(result,intuit75k_test,type='raw')
+intuit75k_test$`pred_nnet` <- probs
 ```
