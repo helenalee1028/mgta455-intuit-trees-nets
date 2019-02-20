@@ -90,10 +90,20 @@ for (i in 1:nrow(params)){
   train_auc <-c(train_auc,train_auc_)
 }
 params$auc <- auc
-params$auc <- train_auc
+params$train_auc <- train_auc
 saveRDS(params, "xgb_tune.rds")
-#xgb_tune <- xgb_tune[,-4]
+
 ```
+```{r}
+params %>% 
+  top_n(auc, n = 4) 
+
+
+```
+
+
+
+
 ```{r}
 ## First tune best nrounds
 nrounds = c(10,50,100,200,300)
@@ -129,7 +139,7 @@ for (i in 1:nrow(params)){
   train_auc <-c(train_auc,train_auc_)
 }
 params$auc <- auc
-params$auc <- train_auc
+params$train_auc <- train_auc
 saveRDS(params, "xgb_tune.rds")
 #xgb_tune <- xgb_tune[,-4]
 ```
