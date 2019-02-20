@@ -1,0 +1,328 @@
+
+---
+title: "model_laura"
+output: html_document
+---
+
+```{r r_setup, include = FALSE}
+## initial settings
+knitr::opts_chunk$set(
+  comment = NA,
+  echo = TRUE,
+  error = TRUE,
+  cache = FALSE,
+  message = FALSE,
+  dpi = 144,
+  warning = FALSE
+)
+
+## width to use when printing tables etc.
+options(
+  width = 250,
+  scipen = 100,
+  max.print = 5000,
+  stringsAsFactors = FALSE
+)
+
+## load radiant packages if needed
+if (!exists("r_environment")) library(radiant)
+```
+
+```{r include=FALSE}
+library(randomForest)
+library(dplyr)
+library(ModelMetrics)
+library(gbm)
+```
+
+#### Data import and pre-processing
+```{r}
+## loading the data. Note that data must be loaded from the data/
+## in the rstudio project directory
+intuit75k <- readr::read_rds(file.path(radiant.data::find_dropbox(), "MGTA455-2019/data/intuit75k.rds"))
+
+## change variable types for 5 factor variables
+intuit75k <- mutate_at(intuit75k, .vars = vars(zip_bins, bizflag, version1, owntaxprod, upgraded), .funs = funs(as_factor))
+
+### create 00801 and 00804 bin
+
+intuit75k <- intuit75k %>% 
+  mutate(zip801 = ifelse(zip == "00801", "Yes", "No"),
+         zip804 = ifelse(zip == "00804", "Yes", "No"))
+
+
+###split the data into train and test.
+
+intuit75k_train <- intuit75k %>%
+  filter(training == 1) %>% 
+  select(-id, -zip, -training) %>% 
+  mutate_if(is.character, as.factor) %>% 
+  mutate(res1 = as.factor(ifelse(res1 == "Yes",1,0)))
+
+intuit75k_test <- intuit75k %>%
+  filter(training == 0) %>% 
+  select(-id, -zip, -training) %>% 
+  mutate_if(is.character, as.factor) %>% 
+  mutate(res1 = as.factor(ifelse(res1 == "Yes",1,0)))
+
+```
+
+#### Define Evaluation Metrics
+
+```{r}
+mail_cost <- 1.41
+margin_revenue <- 60
+breakeven_rate <- mail_cost/margin_revenue
+
+overall_val_resp <- mean(intuit75k_test$res1 == "1")
+
+cm <- function(dat, vars){
+  
+  cm_df <- as.data.frame(matrix(NA, ncol = 3, nrow = length(vars)))
+  colnames(cm_df) <- c("var", "auc", "tpr")
+  
+  for (i in 1:length(vars)){
+    
+    var <- vars[i]
+    probs <- pull(dat, !!var)
+    resp <- pull(dat, "res1")
+    
+    mailto <- ifelse(pull(dat, !!var) > breakeven_rate, "TRUE", "FALSE") # decide whether to mail or not
+    
+    tpr <- sum(resp =="1" & mailto == "TRUE")/sum(resp == "1")
+    auc <- ModelMetrics::auc(resp, probs)
+    
+    cm_vec <- c(var, auc, tpr)
+    cm_df[i,] <- cm_vec
+  }
+  
+  cm_df[,2:3] <- apply(cm_df[,2:3],2,as.numeric)
+  return(cm_df)
+}
+
+model_eval <- function(dat, vars){
+  
+  # calculate expected scaled profits and ROME
+  
+  eval_df <- as.data.frame(matrix(NA, ncol = 6, nrow = length(vars)))
+  colnames(eval_df) <- c("var","nr_mail", "rep_rate_w2", "nr_resp_w2", "profit", "ROME")
+  
+  
+  for (i in 1:length(vars)){
+    
+    var <- vars[i]
+    
+    mailto <- ifelse(pull(dat, !!var) > 2 * breakeven_rate, "TRUE", "FALSE") # decide whether to mail or not
+    mailto_rate <- mean(mailto == "TRUE")
+    nr_mail <- mailto_rate * (801821 - 38487) #target size
+    
+    resp <- pull(dat, "res1") # extract respondents
+    
+    rep_rate_w1 <- sum(resp == "1" & mailto == "TRUE")/sum(mailto=="TRUE") # response rate among targeted audience
+    rep_rate_w2 <- rep_rate_w1 * 0.5
+    nr_resp_w2 <- rep_rate_w2 * nr_mail # response customers among targeted audience
+    
+    sum_cost <- mail_cost * nr_mail
+    revenue <- margin_revenue * nr_resp_w2
+    profit <- revenue - sum_cost
+    ROME <- profit/sum_cost
+    
+    perf_vec <- c(var, nr_mail, rep_rate_w2, nr_resp_w2, profit, ROME)
+    
+    eval_df[i,] <- perf_vec
+  }
+  eval_df[,2:6] <- apply(eval_df[,2:6],2,as.numeric)
+  return(eval_df) 
+}
+
+
+# this function is to plot cumulative gain and cumulative lift charts
+lift_gain_plot <- function(dat, vars){
+  
+  lift_gain_df <- as.data.frame(matrix(NA, ncol = 4))
+  colnames(lift_gain_df) <- c("resp_decile", "cumulative_gain", "cumulative_lift", "var")
+  
+  for (i in 1:length(vars)){
+    
+    var <- vars[i]
+    
+    probs <- pull(dat, !!var)
+    resp <- pull(dat, "res1")
+    
+    lg_dat <- data.frame(probs, resp)
+    lg_dat <- lg_dat %>% 
+      mutate(resp_decile = xtile(probs, n = 10, rev = T)) %>% 
+      group_by(resp_decile) %>% 
+      summarise(n_customer = n(),
+                n_buyer = sum(resp == "1")) %>%
+      mutate(cum_customer = cumsum(n_customer),
+             cum_buyer = cumsum(n_buyer),
+             cumulative_lift = (cum_buyer/cum_customer)/overall_val_resp,
+             cumulative_gain = cum_buyer/sum(n_buyer)) %>% 
+      select(resp_decile, cumulative_gain, cumulative_lift)
+    
+    lg_dat[,var] <- var
+    
+    lift_gain_df <- rbind(lift_gain_df, setNames(lg_dat, names(lift_gain_df)))
+  }
+  
+  lift_gain_df <- lift_gain_df[-1,] #remove first null row
+  lift_gain_df$prop_customer <- rep(seq(0.1,1, 0.1),length(vars))
+  
+  # plot cumulative lift
+  p1 <- lift_gain_df %>% 
+    ggplot(aes(x = prop_customer, y = cumulative_lift, group = var)) + 
+    geom_point(aes(color = var)) + geom_line(aes(color = var))+
+    geom_hline(yintercept = 1, color = "black")
+  
+  
+  
+  # plot cumulative gain
+  p2 <- lift_gain_df %>% 
+    ggplot(aes(x = prop_customer, y = cumulative_gain, group = var)) + 
+    geom_point(aes(color = var)) + geom_line(aes(color = var))+
+    geom_line(aes(y = prop_customer), color = "black")
+  
+  gridExtra::grid.arrange(p1,p2, nrow = 2)
+  
+}
+
+
+```
+
+#### Random Forest
+```{r}
+rf_model <- randomForest(formula = res1 ~ . , data = intuit75k_train, type = "classification")
+
+plot(rf_model)
+
+pred <- predict(rf_model, newdata = intuit75k_test, type = "prob")
+intuit75k_test$pred_rf_default <- pred[,2]
+
+```
+
+```{r}
+# hyper parameter tuning
+mtry <- seq(4, 10, 2)
+nodesize <- seq(4,12,2)
+sampsize <- nrow(intuit75k_train) * c(0.6, 0.7, 0.8, 0.9)
+
+# build parameters matrix and keep auc performance
+params <- expand.grid(mtry, nodesize, sampsize)
+params$auc <- NA
+colnames(params) <- c("mtry", "nodesize", "sampsize", "auc")
+
+# train random forest models and keep track of test data performance
+for (i in 1:nrow(params)){
+  rf_tune <- randomForest(formula = res1 ~ . , data = intuit75k_train, 
+                          type = "classification", mtry = params[i,1], nodesize = params[i,2],
+                          sampsize = params[i,3])
+  
+  pred_tune <- predict(rf_tune, newdata = intuit75k_test, type = "prob")
+  auc <- auc(intuit75k_test$res1, pred_tune[,2])
+  params[i,4] <- auc
+
+}
+
+saveRDS(params, "rf_tune.rds")
+
+
+params %>% 
+  top_n(auc, n = 5) 
+  
+
+```
+
+```{r}
+# based on our previous tuning results, we'll split our parameters into smaller units and train our models
+
+# hyper parameter tuning
+mtry <- c(4,5,6)
+nodesize <- seq(8,12,1)
+sampsize <- nrow(intuit75k_train) * c(0.6, 0.7)
+
+# build parameters matrix and keep auc performance
+params2 <- expand.grid(mtry, nodesize, sampsize)
+params2$auc <- NA
+colnames(params2) <- c("mtry", "nodesize", "sampsize", "auc")
+
+# train random forest models and keep track of test data performance
+for (i in 1:nrow(params2)){
+  rf_tune <- randomForest(formula = res1 ~ . , data = intuit75k_train, 
+                          type = "classification", mtry = params2[i,1], nodesize = params2[i,2],
+                          sampsize = params2[i,3])
+  
+  pred_tune <- predict(rf_tune, newdata = intuit75k_test, type = "prob")
+  auc <- auc(intuit75k_test$res1, pred_tune[,2])
+  params2[i,4] <- auc
+
+}
+
+saveRDS(params2, "rf_tune2.rds")
+
+params2 %>% 
+  arrange(desc(auc)) %>% 
+  top_n(auc, n = 5)
+```
+
+After 2nd round of hyperparameters tuning, we decide to use 5 top performing random forest models in terms of auc and calculate expected profits. 
+
+```{r}
+optimal_params <- params2 %>% 
+  arrange(desc(auc)) %>% 
+  top_n(auc, n = 5) %>% 
+  select(-auc)
+
+rf_preds <- matrix(NA, ncol = nrow(optimal_params), nrow = nrow(intuit75k_test))
+
+for (i in 1:nrow(optimal_params)){
+  rf_tune <- randomForest(formula = res1 ~ . , data = intuit75k_train, 
+                          type = "classification", mtry = optimal_params[i,1], 
+                          nodesize = optimal_params[i,2],
+                          sampsize = optimal_params[i,3])
+  
+  pred_tune <- predict(rf_tune, newdata = intuit75k_test, type = "prob")
+  
+  rf_preds[,i] <- pred_tune[,2]
+}
+
+
+# cbind the predictions to intuit75_test dataframe and put into evaluations
+colnames(rf_preds) <- paste(rep("random_forest", 5), c(1:5))
+intuit75k_test <- cbind(intuit75k_test, rf_preds)
+
+vars <- tail(colnames(intuit75k_test), 5)
+
+model_eval(intuit75k_test, vars)
+cm(intuit75k_test, vars)
+lift_gain_plot(intuit75k_test, vars)
+```
+
+
+### Gradient Boosting Model
+
+```{r}
+# default gbm model
+intuit75k_train$res1 <- as.numeric(intuit75k_train$res1) - 1
+gbm_model <- gbm(formula = res1 ~ ., distribution = "bernoulli", data = intuit75k_train)
+summary(gbm_model)
+
+pred_gbm <- predict(gbm_model, newdata = intuit75k_test, type = "response",n.trees = 100)
+
+intuit75k_test$pred_gbm <- pred_gbm
+
+vars <- c(paste(rep("random_forest",5), c(1:5)),"pred_gbm")
+model_eval(intuit75k_test, vars)
+```
+
+#### Hyper-parameters tuning for GBM
+
+```{r}
+#n.trees, interaction.depth, n.minobsinnode, shrinkage, bag.fraction train.fraction, cv.folds
+
+n.trees = seq(100, 1000)
+
+
+
+```
+
