@@ -1,0 +1,340 @@
+---
+title: "Helena"
+author: "Wenrui_Li"
+date: "2/18/2019"
+output: html_document
+---
+
+```{r r_setup, include = FALSE}
+## initial settings
+knitr::opts_chunk$set(
+  comment = NA,
+  echo = TRUE,
+  error = TRUE,
+  cache = FALSE,
+  message = FALSE,
+  dpi = 144,
+  warning = FALSE
+)
+
+## width to use when printing tables etc.
+options(
+  width = 250,
+  scipen = 100,
+  max.print = 5000,
+  stringsAsFactors = FALSE
+)
+
+## load radiant packages if needed
+if (!exists("r_environment")) library(radiant)
+```
+
+<style>
+.table {
+  width: auto;
+}
+ul, ol {
+  padding-left: 18px;
+}
+pre, code, pre code {
+  overflow: auto;
+  white-space: pre;
+  word-wrap: normal;
+  background-color: #ffffff;
+}
+</style>
+```{r}
+## loading the data. Note that data must be loaded from the data/
+## in the rstudio project directory
+intuit75k <- readr::read_rds(file.path(radiant.data::find_dropbox(), "MGTA455-2019/data/intuit75k.rds"))
+```
+
+```{r}
+library(tidyverse)
+library(rpart)
+library(ipred)
+library(caret)
+library(randomForest)
+library(pROC)
+library(gbm)
+```
+
+
+```{r}
+## change variable types for 5 factor variables
+
+intuit75k <- intuit75k %>% 
+  mutate(zip801 = ifelse(zip == "00801", "Yes", "No"),
+         zip804 = ifelse(zip == "00804", "Yes", "No"))
+
+intuit75k <- mutate_at(intuit75k, .vars = vars(zip_bins, bizflag, version1, owntaxprod, upgraded, zip801, zip804), .funs = funs(as.factor))
+
+class(intuit75k$res1)
+
+train = intuit75k %>%
+  filter(training == 1)
+  
+test = intuit75k %>%
+  filter(training == 0)
+```
+
+Decision Tree (loosen the control)
+```{r}
+decision_tree = rpart(formula = res1 ~ zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, data = train, control=rpart.control(minsplit=2, minbucket=1, cp=0.001))
+```
+
+```{r}
+test$decision_tree_pred = predict(decision_tree, newdata = test, type = 'prob')
+```
+
+## Bagging
+```{r}
+bagging = bagging(formula = res1 ~  zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, data = train, nbagg=50)
+test$bagging_pred = predict(object = bagging, newdata = test, type = 'prob')
+```
+
+## treebag cross-validation
+```{r}
+ctrl = trainControl(method = 'cv', number = 5)
+treebag = train(res1 ~ zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, data = train, method = 'treebag', trControl = ctrl)
+test$treebag_pred = predict(object = treebag, newdata = test, type = 'prob')$`Yes`
+```
+
+## Random Forest
+```{r}
+random_forest = randomForest(formula = res1 ~  zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, data = train)
+test$random_forest_pred = predict(object = random_forest, newdata = test, type = 'prob')
+```
+
+## tuning random forest
+```{r}
+columns = c("zip_bins","numords","dollars","last","version1","owntaxprod","upgraded","zip801","zip804")
+tuning_random_forest <- tuneRF(x = subset(train, select = columns),
+              y = train$res1,
+              ntreeTry = 500, doBest = TRUE)
+
+test$tuning_random_forest_pred = predict(object = tuning_random_forest, newdata = test, type = 'prob')
+```
+
+```{r}
+train$res1 <- ifelse(train$res1 == "Yes", 1, 0)
+test$res1 <- ifelse(test$res1 == "Yes", 1, 0)
+gbm = gbm(formula = res1 ~  zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, distribution = 'bernoulli', data = train, n.trees = 100)
+test$gbm_pred = predict.gbm(object = gbm, newdata = test, type = 'response',n.trees = 100)
+test$res1 <- ifelse(test$res1 == 1, 'Yes', 'No')
+```
+
+```{r}
+## estimating on the dvd data
+dvd_wrk <- readr::read_rds(file.path(find_dropbox(), "MGTA455-2019/data/dvd.rds"))
+dvd_wrk$buy <- ifelse(dvd_wrk$buy == "yes", 1, 0)
+n.trees <- 1000
+
+result <- gbm(
+  buy ~ .,
+  data = dvd_wrk,
+  distribution = "bernoulli",
+  n.trees = n.trees,
+  interaction.depth = 2,
+  shrinkage = 0.01,
+  keep.data = FALSE,
+  cv.folds = 5
+)
+
+## get variable importance
+vimp <- summary(result, plotit = FALSE, n.trees = n.trees)
+visualize(vimp, type = "bar", xvar = "var", yvar = "rel.inf")
+
+## estimating on the bbb
+bbb_wrk <- readr::read_rds(file.path(find_dropbox(), "MGTA455-2019/data/bbb.rds"))
+bbb_wrk <- mutate(
+  bbb_wrk,
+  buyer = ifelse(buyer == "yes", 1, 0),
+  gender = ifelse(gender == "M", 1, 0)
+)
+n.trees <- 1000
+
+result <- gbm(
+  buyer ~ gender + last + total + purch + child + youth + cook + do_it + reference + art + geog,
+  data = bbb_wrk,
+  distribution = "bernoulli",
+  n.trees = n.trees,
+  interaction.depth = 2,
+  shrinkage = 0.01,
+  keep.data = FALSE,
+  cv.folds = 5
+)
+
+## get variable importance
+vimp <- summary(result, plotit = FALSE, n.trees = n.trees)
+visualize(vimp, type = "bar", xvar = "var", yvar = "rel.inf")
+
+
+```
+
+
+
+```{r}
+# Establish a list of possible values for mtry, nodesize and sampsize
+mtry <- seq(4, ncol(train) * 0.8, 2)
+nodesize <- seq(3, 8, 2)
+sampsize <- nrow(credit_train) * c(0.7, 0.8)
+
+# Create a data frame containing all combinations 
+hyper_grid <- expand.grid(mtry = mtry, nodesize = nodesize, sampsize = sampsize)
+
+# Create an empty vector to store OOB error values
+oob_err <- c()
+
+# Write a loop over the rows of hyper_grid to train the grid of models
+for (i in 1:nrow(hyper_grid)) {
+
+    # Train a Random Forest model
+    model <- randomForest(formula = res1 ~ zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, 
+                          data = credit_train,
+                          mtry = hyper_grid$mtry[i],
+                          nodesize = hyper_grid$nodesize[i],
+                          sampsize = hyper_grid$sampsize[i])
+                          
+    # Store OOB error for the model                      
+    oob_err[i] <- model$err.rate[nrow(model$err.rate), "OOB"]
+}
+
+# Identify optimal set of hyperparmeters based on OOB error
+opt_i <- which.min(oob_err)
+print(hyper_grid[opt_i,])
+
+
+roc_obj <- roc(category, prediction)
+auc(roc_obj)
+## Area under the curve: 0.825
+roc_df <- data.frame(
+  TPR=rev(roc_obj$sensitivities), 
+  FPR=rev(1 - roc_obj$specificities), 
+  labels=roc_obj$response, 
+  scores=roc_obj$predictor)
+
+```
+
+
+
+```{r}
+model_eval <- function(dat, vars){
+  
+  # calculate expected scaled profits and ROME
+  
+  eval_df <- as.data.frame(matrix(NA, ncol = 6, nrow = length(vars)))
+  colnames(eval_df) <- c("var","nr_mail", "rep_rate_w2", "nr_resp_w2", "profit", "ROME")
+  
+  
+  for (i in 1:length(vars)){
+    
+    var <- vars[i]
+    
+    mailto <- ifelse(pull(dat, !!var) > 2 * breakeven_rate, "TRUE", "FALSE") # decide whether to mail or not
+    mailto_rate <- mean(mailto == "TRUE")
+    nr_mail <- mailto_rate * (801821 - 38487) #target size
+    
+    resp <- pull(dat, "res1") # extract respondents
+    
+    rep_rate_w1 <- sum(resp == "Yes" & mailto == "TRUE")/sum(mailto=="TRUE") # response rate among targeted audience
+    rep_rate_w2 <- rep_rate_w1 * 0.5
+    nr_resp_w2 <- rep_rate_w2 * nr_mail # response customers among targeted audience
+    
+    sum_cost <- mail_cost * nr_mail
+    revenue <- margin_revenue * nr_resp_w2
+    profit <- revenue - sum_cost
+    ROME <- profit/sum_cost
+    
+    perf_vec <- c(var, nr_mail, rep_rate_w2, nr_resp_w2, profit, ROME)
+    
+    eval_df[i,] <- perf_vec
+  }
+  
+  return(eval_df) 
+}
+
+```
+
+```{r}
+mail_cost <- 1.41
+margin_revenue <- 60
+breakeven_rate <- mail_cost/margin_revenue
+vars_vec = c('decision_tree_pred','bagging_pred','treebag_pred','random_forest_pred','tuning_random_forest_pred')
+model_eval(test,vars_vec)
+```
+
+
+```{r}
+model_eval(test,'gbm_pred')
+y_train = train$res1
+X_train = train[,-13]
+y_test = test$res1
+X_test = test[,-13]
+```
+
+
+```{python}
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.metrics import accuracy_score, f1_score, roc_auc_score
+from sklearn.naive_bayes import GaussianNB
+from sklearn.svm import SVC
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.neural_network import MLPClassifier
+```
+
+
+```{python}
+models = [GaussianNB(),
+          SVC(random_state=5),
+          RandomForestClassifier(random_state=5, n_estimators=10),
+          MLPClassifier(random_state=5)]
+```
+
+
+```{python}
+grid_data = [{},
+              {'kernel': ['rbf', 'sigmoid'], 'C': [0.1, 1, 10, 100], 'random_state': [5]},
+              {'n_estimators': [10, 50, 100],
+               'criterion': ['gini', 'entropy'],
+               'max_depth': [None, 10, 50, 100],
+               'min_samples_split': [2, 5, 10],
+               'random_state': [5]},
+              {'hidden_layer_sizes': [10, 50, 100],
+               'activation': ['identity', 'logistic', 'tanh', 'relu'],
+               'solver': ['lbfgs', 'sgd', 'adam'],
+               'learning_rate': ['constant', 'invscaling', 'adaptive'],
+               'max_iter': [200, 400, 800],
+               'random_state': [5]}]
+```
+
+
+```{python}
+print(models)
+```
+```{python}
+models_grid = list()
+for i in range(0,len(models)):
+    print(i)
+    grid = GridSearchCV(estimator = models[i], param_grid = grid_data[i], scoring='f1').fit(X_train, y_train) 
+    # there is some problem here. cannot finish
+    print(grid.best_params_)
+    model = grid.best_estimator_
+    models_grid.append(model)
+```
+```{r}
+X_train = as.matrix(X_train)
+X_train
+```
+
+```{python}
+
+y_train = train['res1']
+X_train = train[,-13]
+y_test = test$res1
+X_test = test[,-13]
+```
+```{python}
+print(train)
+```
+

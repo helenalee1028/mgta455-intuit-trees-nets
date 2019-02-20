@@ -122,6 +122,7 @@ intuit75k <- intuit75k %>%
   mutate(zip801 = ifelse(zip == "00801", "Yes", "No"),
          zip804 = ifelse(zip == "00804", "Yes", "No"))
 
+intuit75k <- mutate_at(intuit75k, .vars = vars(zip801,zip804), .funs = funs(as_factor))
 
 ###split the data into train and test.
 

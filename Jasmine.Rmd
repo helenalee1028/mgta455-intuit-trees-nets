@@ -1,0 +1,162 @@
+---
+title: "Jasmine"
+author: "s1shi"
+date: "2/18/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Decision tree in Radiant.
+```{r}
+result <- crtree(
+  intuit75k_train, 
+  rvar = "res1", 
+  evar = c(
+    "zip_bins", "numords", "dollars", "last", "version1", 
+    "owntaxprod", "upgraded", "zip801", "zip804"
+  ), 
+  type = "classification", 
+  lev = "Yes", 
+  cost = 1.41, 
+  margin = 60, 
+  data_filter = "train == 0"
+)
+summary(result, prn = TRUE)
+pred <- predict(result, pred_data = intuit75k_test)
+print(pred, n = 10)
+intuit75k_test <- store(intuit75k_test, pred, name = "pred_crtree")
+```
+
+Decision tree in rpart.
+```{r}
+# train tree
+ctrl = rpart::rpart.control(cp = 0.001)
+loss = matrix(c(0,1.41,60,0),nrow = 2)
+
+result <- rpart(res1 ~zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804 , 
+                data = intuit75k_train, 
+                control = ctrl,
+                method = "class",
+                parms = list(loss = loss),
+                minsplit = 2)
+
+printcp(result)
+#plotcp(decision_cart)
+#summary(decision_cart)
+
+pred <- tbl_df(predict(result, newdata = intuit75k_test, type = "prob"))
+#print(pred, n = 10)
+
+intuit75k_test$`pred_rpart` <- pred$Yes
+
+#intuit75k_test <- store(intuit75k_test, pred, name = "pred_rpart")
+```
+ 
+Random forest -- ranger
+
+```{r}
+#library(ranger)
+#train.idx <- sample(nrow(intuit75k_train), 2/3 * nrow(intuit75k_train))
+#intuit75k_train.train <- intuit75k_train[train.idx, ]
+#intuit75k_train.test <- intuit75k_train[-train.idx, ]
+
+result <- ranger(res1 ~zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804,
+               data = intuit75k_train,
+               #test_data = intuit75k_train.test,
+               num.trees = 50,
+               mtry = 4,
+               probability = TRUE)
+       
+pred <- predict(result, data = intuit75k_test)
+intuit75k_test$`pred_ranf` <- pred$predictions
+```
+
+Boost decision tree- gbm
+
+```{r}
+library(gbm)
+## change res1 to 1,0
+intuit75k_train$res1 <- ifelse(intuit75k_train$res1 =='Yes',1,0)
+intuit75k_test$res1 <- ifelse(intuit75k_test$res1 =='Yes',1,0)
+result <- gbm(res1 ~zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, ## zip801/804 must be factor rather than character here
+              data = intuit75k_train,
+              distribution = "bernoulli",
+              n.trees = 100,
+              shrinkage = 0.01, 
+              interaction.depth = 4)
+
+pred <- predict(result, newdata = intuit75k_test,n.trees =100,
+                type="response" ## this will return probability
+                )
+intuit75k_test$`pred_gbm` <- pred
+```
+
+Xgboost - xgboost
+
+```{r}
+library(caret)
+## create a new data set for xgboost
+temp <- dummyVars(~zip_bins +sex ,data = intuit75k)
+pred <- predict(temp, newdata = intuit75k)
+intuit75k_xgb <- cbind(intuit75k,pred)
+
+
+intuit75k_xgb <- intuit75k_xgb %>%
+  select(-c('zip_bins.1','sex.Female')) %>%
+  mutate(upgraded = as.numeric(upgraded),
+         owntaxprod =as.numeric(upgraded),
+         version1 = as.numeric(version1),
+         bizflag =as.numeric(bizflag)) %>%
+  mutate(zip801 = ifelse(zip801 == 'Yes',1,0),
+         zip804 = ifelse(zip804 == 'Yes',1,0),
+         res1 = ifelse(res1 == 'Yes',1,0))
+
+intuit75k_xgb <- intuit75k_xgb %>%
+  select(-zip)
+#summary(intuit75k_xgb)
+
+intuit75k_xgb_train <- intuit75k_xgb %>%
+  filter(training == 1) 
+
+intuit75k_xgb_test <- intuit75k_xgb %>%
+  filter(training == 0)
+```
+Train xgb model
+```{r}
+library(xgboost)
+X_train = model.matrix(res1~.,intuit75k_xgb_train)[,-13]
+y_train = intuit75k_xgb_train$res1
+
+X_test = model.matrix(res1~.,intuit75k_xgb_test)[,-13]
+y_test = intuit75k_xgb_test$res1
+result <- xgboost(data = X_train,label = y_train,
+              nrounds = 100 ,
+              objective = "binary:logistic",
+              max_depth = 10, eta = 0.1,
+              eval_metric ="auc"
+  
+)
+probs = predict(result , X_test)
+intuit75k_xgb_test$`pred_xgb` <- probs
+intuit75k_test$`pred_xgb` <- probs
+```
+
+Neural Network
+```{r}
+library(nnet)
+result <- nnet(res1 ~zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804,
+               size = 2,
+               data = intuit75k_train,
+               rang = 0.1,
+               decay = 0.5,
+               maxit = 200)
+
+probs <- predict(result,intuit75k_test,type='raw')
+intuit75k_test$`pred_nnet` <- probs
+```
+
+
