@@ -21,10 +21,10 @@ intuit75k_xgb_train <- intuit75k_train %>%
   select(-c('sex','zip_bins','zip_bins.1','sex.Female')) %>%
   mutate(zip801 = ifelse(zip801 == 'Yes',1,0),
          zip804 = ifelse(zip804 == 'Yes',1,0)) %>%
-  mutate(upgraded = as.numeric(upgraded),
-         owntaxprod =as.numeric(upgraded),
-         version1 = as.numeric(version1),
-         bizflag =as.numeric(bizflag),
+  mutate(upgraded = as.numeric(upgraded)-1,
+         owntaxprod =as.numeric(upgraded)-1,
+         version1 = as.numeric(version1)-1,
+         bizflag =as.numeric(bizflag)-1,
          res1 = as.numeric(res1)-1)
 ## change bizflag, version1,owntaxprod,upgraded,res1 to numeric 
 
@@ -35,10 +35,10 @@ intuit75k_xgb_test <- intuit75k_test %>%
   select(-c('sex','zip_bins','zip_bins.1','sex.Female')) %>%
   mutate(zip801 = ifelse(zip801 == 'Yes',1,0),
          zip804 = ifelse(zip804 == 'Yes',1,0)) %>%
-  mutate(upgraded = as.numeric(upgraded),
-         owntaxprod =as.numeric(upgraded),
-         version1 = as.numeric(version1),
-         bizflag =as.numeric(bizflag),
+  mutate(upgraded = as.numeric(upgraded)-1,
+         owntaxprod =as.numeric(upgraded)-1,
+         version1 = as.numeric(version1)-1,
+         bizflag =as.numeric(bizflag)-1,
          res1 = as.numeric(res1)-1)
 ```
 Train xgboost model
@@ -169,4 +169,11 @@ AUC <- tail(xgb$evaluation_log$val_auc,1)
 pred = predict(xgb, dtest)
 intuit75k_test$`pred_xgb` <- pred
 model_eval(intuit75k_test, 'pred_xgb')
+```
+
+
+```{r}
+
+
+
 ```
