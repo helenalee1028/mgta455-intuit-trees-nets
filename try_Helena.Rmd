@@ -380,9 +380,14 @@ test_gbm1 <- cbind(test_gbm, gbm_preds)
 
 vars <- tail(colnames(test_gbm1), 8)
 test_gbm1$res1 <- ifelse(test_gbm1$res1 == 1, 'Yes', 'No')
+
 model_eval(test_gbm1, vars)
 cm(test_gbm1, vars)
 lift_gain_plot(test_gbm1, vars)
+gbm_tune1_model_eval = model_eval(test_gbm1, vars)
+saveRDS(gbm_tune1_model_eval, "data/gbm_tune1_model_eval.rds")
+gbm_tune1_model_eval <- readRDS("data/gbm_tune1_model_eval.rds")
+gbm_tune1_model_eval
 ```
 
 Tune n.trees parameter value to 200
@@ -417,6 +422,10 @@ test_gbm2$res1 <- ifelse(test_gbm2$res1 == 1, 'Yes', 'No')
 model_eval(test_gbm2, vars2)
 cm(test_gbm2, vars2)
 lift_gain_plot(test_gbm2, vars2)
+gbm_tune2_model_eval = model_eval(test_gbm2, vars2)
+saveRDS(gbm_tune2_model_eval, "data/gbm_tune2_model_eval.rds")
+gbm_tune2_model_eval <- readRDS("data/gbm_tune2_model_eval.rds")
+gbm_tune2_model_eval
 ```
-Thus 
-So the best model we select in the end has the highest profit of 459466.00128 on the test set. It has the hyperparameters of 3 interaction depth, shrinkage of 0.1. 
+Thus we can see that using 100 n.trees is better than 200 trees, so for the final model we choose to use 100 n.trees to train the data to prevent overfitting.
+So the best model we select has the highest profit of 460358.593170667 on the test set. It has the hyperparameters of 3 interaction depth, shrinkage of 0.1.
