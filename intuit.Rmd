@@ -81,12 +81,6 @@ Additional resource on the use of git are linked below:
 * https://github.com/GitInPractice/GitInPractice#readme
 
 
-```{r}
-## loading the data. Note that data must be loaded from the data/
-## in the rstudio project directory
-intuit75k <- readr::read_rds(file.path(radiant.data::find_dropbox(), "MGTA455-2019/data/intuit75k.rds"))
-```
-
 ```{r include = FALSE}
 library(xgboost)
 library(caret)
@@ -141,7 +135,11 @@ mail_cost <- 1.41
 margin_revenue <- 60
 breakeven_rate <- mail_cost/margin_revenue
 
-overall_val_resp <- mean(intuit75k_test$res1 == "Yes")
+overall_val_resp <- intuit75k %>% 
+  filter(training == 0) %>% 
+  summarise(avg_resp = mean(res1 == "Yes")) %>% 
+  pull()
+  
 
 cm <- function(dat, vars){
   
@@ -256,7 +254,7 @@ lift_gain_plot <- function(dat, vars){
 ```{r, child = "random_forest.Rmd"}
 ```
 
-```{r, child = "try_Helena.Rmd"}
+```{r, child = "dt_bagging_gbm.Rmd"}
 
 ```
 
@@ -299,20 +297,21 @@ eval_df %>%
 
 ```
 
+
 ```{r fig.height=10, fig.width=7}
 lift_gain_plot(final_eval, vars)
-cm(final_eval, vars)
+
+cm_df <- cm(final_eval, vars)
+cm_df[,2:3] <- lapply(cm_df[,2:3], as.numeric)
+cm_df
 ```
 
-From profit and ROME comparisons we can see that the ensemble result of GBM and XGB perform the best in terms of expected profits. Though random forest has the highest ROME, it has higher risk of missing potential customers. Therefore, we favor the model with highest expected profits.
-
-In lift and gain charts, all gradient based models perform quite similar while random forest performs the worst. In confusion matrix term, again emsemble_2m is one of the best models in terms of both AUC and TRP. 
-
-Therefore, we use predicted probabilities in Ensemble_2m to determine whom to mail during wave-2 promotions.
+From profit and ROME comparisons we can see that GBM model performs the best in terms of expected profits. Though random forest has the highest ROME, it has higher risk of missing potential customers. Therefore, we favor the model with highest expected profits. In lift and gain charts, all gradient based models perform quite similar while random forest performs the worst. In confusion matrix table, GBM has the highest AUC but medium  TRP. Therefore, we use predicted probabilities in GBM m to determine whom to mail during wave-2 promotions.
 
 ```{r}
 targets <- final_eval %>% 
-  mutate(mailto_wave2 = ifelse(ensemble_2m > 2*breakeven_rate, "TRUE", "FALSE")) %>% 
+  mutate(mailto_wave2 = ifelse(res1 =="Yes", "FALSE",
+                               ifelse(gbm_best > 2*breakeven_rate, "TRUE", "FALSE"))) %>% 
   select(id, mailto_wave2)
 
 saveRDS(targets, "data/Menghui_Shumeng_Wenrui_Group10.rds")

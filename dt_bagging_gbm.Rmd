@@ -71,12 +71,13 @@ vars_vec = c('decision_tree_pred','bagging_pred','treebag_pred','gbm_pred')
 basic_model_eval = model_eval(test,vars_vec)
 saveRDS(basic_model_eval, "data/basic_model_eval.rds")
 cm(test,vars_vec)
-lift_gain_plot(test,vars_vec)
 basic_model_eval <- readRDS("data/basic_model_eval.rds")
 basic_model_eval
 ```
 
 The model with outstanding profits is gbm, so we will focus on tuning the hyparameters of this model.
+
+### GBM - hyperparameter tuning
 
 ```{r eval = FALSE}
 # hyper parameter tuning
@@ -257,12 +258,18 @@ gbm_tune2_model_eval[,2:6] <- lapply(gbm_tune2_model_eval[,2:6], as.numeric)
 gbm_tune2_model_eval
 ```
 
-Thus we can see that using 100 n.trees is better than 200 trees, so for the final model we choose to use 100 n.trees to train the data to prevent overfitting. So the best model we select has the highest profit of $460,358.59 on the test set. It has the hyperparameters of 3 interaction depth, shrinkage of 0.1.
+We can see that using 100 n.trees is better than 200 trees, so for the final model we choose to use 100 n.trees to train the data to prevent overfitting. The best model we select has the highest expected profit around $460k. It has the hyperparameters of 3 interaction depth, shrinkage of 0.1.
 
-```{r}
+```{r eval = FALSE}
 
 # get optimal parameters 
 opt_pos <- which.max(gbm_tune1_model_eval$profit)
+
+optimal_params_gbm <- params2 %>% 
+arrange(desc(auc)) %>% 
+top_n(auc, n = 8) %>% 
+select(-auc)
+
 shrinkage <- optimal_params_gbm[opt_pos,2]
 interaction_depth <- optimal_params_gbm[opt_pos, 1]
 

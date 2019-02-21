@@ -233,7 +233,7 @@ From the result, the best nrounds is 30, eta = 0.2,max_depth = 4, subsample is 0
 
 We trained our best model, make prediction on test set and store the estimated probability is stored in column 'pred_xgb' in dataframe 'intuit75k_test'.
 Based on this model, estimated profit of 2-wave emailing would be about 440000 dollars.
-```{r}
+```{r eval = FALSE}
 params <- list(
   objective = "binary:logistic",
   eta = 0.2,
@@ -244,7 +244,7 @@ params <- list(
   #gamma = 10
 )
 
-
+set.seed(123)
 xgb <- xgb.train(
     nrounds = 30,
     params = params,
