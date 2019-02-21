@@ -682,7 +682,7 @@ vars &lt;- tail(colnames(intuit75k_test), 6)
 
 model_eval(intuit75k_test, vars)</code></pre>
 <pre><code>              var  nr_mail rep_rate_w2 nr_resp_w2   profit     ROME
-1 pred_rf_default 155448.7  0.06383675   9923.342 376217.8 1.716458
+1 pred_rf_default 156195.1  0.06440052  10059.046 383307.7 1.740448
 2  random_forest1 117146.3  0.07877208   9227.860 388495.3 2.352003
 3  random_forest2 108970.2  0.07985679   8702.008 368472.5 2.398161
 4  random_forest3 127256.3  0.07371368   9380.527 383400.3 2.136752
@@ -741,16 +741,16 @@ saveRDS(basic_model_eval, &quot;data/basic_model_eval.rds&quot;)
 cm(test,vars_vec)</code></pre>
 <pre><code>                 var               auc               tpr
 1 decision_tree_pred 0.586884156195628  1.99456029011786
-2       bagging_pred  0.69515318298788  1.60743427017226
-3       treebag_pred 0.675066504904412 0.596554850407978
-4           gbm_pred 0.759015856647107 0.909338168631006</code></pre>
+2       bagging_pred  0.70147300794703  1.62647325475975
+3       treebag_pred 0.677223076027087 0.602901178603808
+4           gbm_pred 0.758465051171161 0.905711695376247</code></pre>
 <pre class="r"><code>basic_model_eval &lt;- readRDS(&quot;data/basic_model_eval.rds&quot;)
 basic_model_eval</code></pre>
 <pre><code>                 var  nr_mail rep_rate_w2 nr_resp_w2   profit      ROME
-1 decision_tree_pred 389741.4  0.02826863  11017.454 111511.9 0.2029203
-2       bagging_pred 480510.3  0.02972429  14282.827 179450.2 0.2648635
-3       treebag_pred 157382.5  0.05550765   8735.934 302246.7 1.3620278
-4           gbm_pred 192835.1  0.06078466  11721.418 431387.5 1.5865812</code></pre>
+1 decision_tree_pred 389741.4  0.02826863   11017.45 111511.9 0.2029203
+2       bagging_pred 480289.8  0.03005580   14435.49 188921.1 0.2789703
+3       treebag_pred 158603.8  0.05711230    9058.23 319862.4 1.4303106
+4           gbm_pred 191240.6  0.06138017   11738.38 434653.6 1.6119220</code></pre>
 <p>The model with outstanding profits is gbm, so we will focus on tuning the hyparameters of this model.</p>
 </div>
 <div id="gbm---hyperparameter-tuning" class="section level3">
@@ -1272,7 +1272,7 @@ cm_df</code></pre>
 3    xgb_best 0.7627369 0.8667271
 4 ensemble_2m 0.7663956 0.8640073
 5 ensemble_3m 0.7628152 0.8168631</code></pre>
-<p>From profit and ROME comparisons we can see that GBM model performs the best in terms of expected profits. Though random forest has the highest ROME, it has higher risk of missing potential customers. Therefore, we favor the model with highest expected profits. In lift and gain charts, all gradient based models perform quite similar while random forest performs the worst. In confusion matrix table, GBM has the highest AUC but medium TRP. Therefore, we use predicted probabilities in GBM m to determine whom to mail during wave-2 promotions.</p>
+<p>From profit and ROME comparisons we can see that GBM model performs the best in terms of expected profits. Though random forest has the highest ROME, it has higher risk of missing potential customers. Therefore, we favor the model with highest expected profits. In lift and gain charts, all gradient based models perform quite similar while random forest performs the worst. In confusion matrix table, GBM has the highest AUC but medium TPR. Therefore, we use predicted probabilities in GBM model to determine whom to mail during wave-2 promotions.</p>
 <pre class="r"><code>targets &lt;- final_eval %&gt;% 
   mutate(mailto_wave2 = ifelse(res1 ==&quot;Yes&quot;, &quot;FALSE&quot;,
                                ifelse(gbm_best &gt; 2*breakeven_rate, &quot;TRUE&quot;, &quot;FALSE&quot;))) %&gt;% 

@@ -306,7 +306,7 @@ cm_df[,2:3] <- lapply(cm_df[,2:3], as.numeric)
 cm_df
 ```
 
-From profit and ROME comparisons we can see that GBM model performs the best in terms of expected profits. Though random forest has the highest ROME, it has higher risk of missing potential customers. Therefore, we favor the model with highest expected profits. In lift and gain charts, all gradient based models perform quite similar while random forest performs the worst. In confusion matrix table, GBM has the highest AUC but medium  TRP. Therefore, we use predicted probabilities in GBM m to determine whom to mail during wave-2 promotions.
+From profit and ROME comparisons we can see that GBM model performs the best in terms of expected profits. Though random forest has the highest ROME, it has higher risk of missing potential customers. Therefore, we favor the model with highest expected profits. In lift and gain charts, all gradient based models perform quite similar while random forest performs the worst. In confusion matrix table, GBM has the highest AUC but medium TPR. Therefore, we use predicted probabilities in GBM model to determine whom to mail during wave-2 promotions.
 
 ```{r}
 targets <- final_eval %>% 
