@@ -9,11 +9,13 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## 0219 Xgboost
+# Xgboost
+
+## Data preparation
 ```{r}
 library(xgboost)
 library(caret)
-## create dataframe
+## change zip and sex to dummy variable
 temp <- dummyVars(~zip_bins +sex ,data = intuit75k_train)
 pred <- predict(temp, newdata = intuit75k_train)
 intuit75k_xgb_train <- intuit75k_train %>%
@@ -21,13 +23,14 @@ intuit75k_xgb_train <- intuit75k_train %>%
   select(-c('sex','zip_bins','zip_bins.1','sex.Female')) %>%
   mutate(zip801 = ifelse(zip801 == 'Yes',1,0),
          zip804 = ifelse(zip804 == 'Yes',1,0)) %>%
+  ## change bizflag, version1,owntaxprod,upgraded,res1 to numeric 
   mutate(upgraded = as.numeric(upgraded)-1,
          owntaxprod =as.numeric(upgraded),
          version1 = as.numeric(version1)-1,
          bizflag =as.numeric(bizflag)-1,
          res1 = as.numeric(res1)-1)
-## change bizflag, version1,owntaxprod,upgraded,res1 to numeric 
 
+# same operation on test set
 temp <- dummyVars(~zip_bins +sex ,data = intuit75k_test)
 pred <- predict(temp, newdata = intuit75k_test)
 intuit75k_xgb_test <- intuit75k_test %>%
@@ -41,7 +44,7 @@ intuit75k_xgb_test <- intuit75k_test %>%
          bizflag =as.numeric(bizflag)-1,
          res1 = as.numeric(res1)-1)
 ```
-Train xgboost model
+## Create xgboost-specific DMatrix
 
 ```{r}
 X_train = model.matrix(res1~.,intuit75k_xgb_train)
@@ -53,21 +56,15 @@ y_test = intuit75k_xgb_test$res1
 dtest <- xgb.DMatrix(data = X_test, label = y_test)
 dtrain <- xgb.DMatrix(data = X_train, label = y_train)
 ```
-## First tune best nrounds
+## First tune general parameter in xgboost model--nrounds, eta and max_depth.
 
-```{r}
-## First tune best nrounds
+```{r,eval = FALSE}
+## create vector storing paremeters. 
 nrounds = c(20,30)
 objective = "binary:logistic"
 eta <- c(0.2,0.3)
 max_depth <- c(6,7,8)
-#subsample <- c(0.5)
-#colsample_bytree <- c(0.5)
-#gamma <- c(0,0.1,0.2)
-#min_child_weight <- c(5)
-#nrounds = c(20,30,50,100,200,500)
-#eta <- c(0.1,0.2,0.3)
-#max_depth <- c(4,5,6,7,8)
+## create grid search matrix
 params <- expand.grid(nrounds,objective,eta,max_depth)
 #params$auc <- NA
 colnames(params) <- c("nrounds",'objective', "eta",'max_depth')
@@ -93,21 +90,68 @@ params$auc <- auc
 params$train_auc <- train_auc
 saveRDS(params, "xgb_tune.rds")
 
-```
-```{r}
 params %>% 
-  top_n(auc, n = 3) 
+  top_n(auc, n = 5) 
+```
+From all the 5 best combinations with higher auc, we can decide on the best eta is 0.2. Also, the best nround would be something between 20 and 30. We then use this for further tuning. AS max_depth = 6 does better than max_depth = 7 or 8, we draw the conclusion that the best max_depth would be something smaller than 6. 
+
+
+Second,we create a random search, we generate random combinations of the hyperparameters and to find the best for the models. We can afford to test parameters with wider range compared to grid search. We use randome search to narrow down parameter range and then put into gird search to get more accurate values.
+```{r,eval = FALSE}
+nrounds_ = seq(20,30,1)
+objective_ = "binary:logistic"
+eta_ <- c(0.2)
+max_depth_ <- seq(1,6,1)
+subsample_ <- seq(0.4,1,0.1)
+colsample_bytree_ <- seq(0.4,1,0.1)
+gamma_ <- c(0,0.2,0.1)
+min_child_weight_ <- seq(1,10,1)
+
+df <- as.data.frame(matrix(NA, ncol = 9, nrow = 100))
+colnames(df) <- c('nrounds','objective','eta','max_depth','subsample','colsample_bytree','gamma','min_child_weight','auc')
+for (i in 1:100){
+  
+  nrounds <- sample(nrounds_,1)
+  objective <- sample(objective_,1)
+  eta <- sample(eta_,1)
+  max_depth <- sample(max_depth_,1)
+  subsample<- sample(subsample_,1)
+  colsample_bytree <- sample(colsample_bytree_,1)
+  gamma <- sample(gamma_,1)
+  min_child_weight <- sample(min_child_weight_,1)
+  
+  
+  temp <- data.frame('nrounds' = nrounds,'objective' = objective,
+"eta" = eta,'max_depth' =max_depth ,'subsample' =subsample, 'colsample_bytree' =colsample_bytree ,'gamma' = gamma,'min_child_weight' = min_child_weight)
+  params <- as.list(temp)
+  x <-c(nrounds,objective,eta,max_depth,subsample,colsample_bytree,gamma,min_child_weight)
+  
+  xgb <- xgb.train(
+    nrounds =nrounds,
+    params = as.list(params[-1]),
+    data = dtrain,
+    watchlist = list(val = dtest, train = dtrain),
+    print_every_n = 5,
+    eval_metric = "auc")
+  auc_ <- tail(xgb$evaluation_log$val_auc,1)
+  x <- c(x,auc_)
+  df[i,] <-x
+
+}
+
+arrange(df, desc(df$auc))[1:10, ]
 ```
 
-We then determine the best eta is 0.2, and max_depth is 6. Try other parameters.
+From the stored dataframe, we calculate the average parameters of the top 10 rows. We found the best max_depth is 4, best subsample is between 0.8 and 1, colsample is alse between 0.8 and 1. Gamma = 0 is better. 
 
 
-```{r}
+Then we do grid search for more accurate estimate.
+```{r,eval = FALSE}
 ## First tune best nrounds
 nrounds = c(20,30)
 objective = "binary:logistic"
 eta <- c(0.2)
-max_depth <- c(6)
+max_depth <- c(4)
 subsample <- seq(0.8,1,0.2)
 colsample_bytree <- c(0.8)
 gamma <- c(0)
@@ -140,77 +184,40 @@ params$auc <- auc
 params$train_auc <- train_auc
 saveRDS(params, "xgb_tune_all.rds")
 #xgb_tune <- xgb_tune[,-4]
-```
-```{r}
+
 params %>% 
-  top_n(auc, n = 10) 
+  top_n(auc, n = 10)
 ```
 
-From the result, the appropriate nrounds are 20 and 30,eta = 0.2,max_depth = 6 subsample is 1, colsamply_bytree is 0.8, gamma is 0. min_child_weight is 1.
+
+From the result, the best nrounds is 30,eta = 0.2,max_depth = 4, subsample is 0.8, colsamply_bytree is 0.8, gamma is 0. min_child_weight is 10.
+
+
+We trained our best model, make prediction on test set and generate profit estimation.
+
 ```{r}
 params <- list(
   objective = "binary:logistic",
   eta = 0.2,
-  max_depth = 6,
+  max_depth = 4,
   colsamply_bytree = 0.8,
-  min_child_weight = 1
+  min_child_weight = 10,
+  subsample = 0.8
+  #gamma = 10
 )
 
 
 xgb <- xgb.train(
-    nrounds = 20,
+    nrounds = 30,
     params = params,
     data = dtrain,
     watchlist = list(val = dtest, train = dtrain),
-    print_every_n = 1,
+    print_every_n = 5,
     eval_metric = "auc")
 AUC <- tail(xgb$evaluation_log$val_auc,1)
 
 pred = predict(xgb, dtest)
 intuit75k_test$`pred_xgb` <- pred
 model_eval(intuit75k_test, 'pred_xgb')
+
 ```
-
-Random search
-```{r}
-nrounds_ = seq(20,30,1)
-objective_ = "binary:logistic"
-eta_ <- c(0.2)
-max_depth_ <- c(6)
-subsample_ <- seq(0.4,1,0.1)
-colsample_bytree_ <- seq(0.4,1,0.1)
-gamma_ <- c(0,0.2,0.1)
-min_child_weight_ <- seq(1,5,1)
-
-df <- as.data.frame(matrix(NA, ncol = 9, nrow = 100))
-colnames(df) <- c('nrounds','objective','eta','max_depth','subsample','colsample_bytree','gamma','min_child_weight','min_child_weight')
-for (i in 1:100){
-  
-  nrounds <- sample(nrounds,1)
-  objective <- sample(objective_,1)
-  eta <- sample(eta_,1)
-  max_depth <- sample(max_depth_,1)
-  subsample<- sample(subsample_,1)
-  colsample_bytree <- sample(colsample_bytree_,1)
-  gamma <- sample(gamma_,1)
-  min_child_weight <- sample(min_child_weight_,1)
-  
-  
-  temp <- data.frame('nrounds' = nrounds,'objective' = objective,
-"eta" = eta,'max_depth' =max_depth ,'subsample' =subsample, 'colsample_bytree' =colsample_bytree ,'gamma' = gamma,'min_child_weight' = min_child_weight)
-  params <- as.list(temp)
-  x <-c(nrounds,objective,eta,max_depth,subsample,colsample_bytree,gamma,min_child_weight)
-  
-  xgb <- xgb.train(
-    nrounds =nrounds,
-    params = as.list(params[-1]),
-    data = dtrain,
-    watchlist = list(val = dtest, train = dtrain),
-    print_every_n = 5,
-    eval_metric = "auc")
-  auc_ <- tail(xgb$evaluation_log$val_auc,1)
-  x <- c(x,auc_)
-  df[i,] <-x
-
-}
-
