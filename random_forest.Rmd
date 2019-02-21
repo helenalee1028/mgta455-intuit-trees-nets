@@ -1,0 +1,163 @@
+```{r include=FALSE}
+library(randomForest)
+library(dplyr)
+library(ModelMetrics)
+library(gbm)
+```
+
+#### Data import and pre-processing
+```{r}
+## loading the data. Note that data must be loaded from the data/
+## in the rstudio project directory
+intuit75k <- readr::read_rds(file.path(radiant.data::find_dropbox(), "MGTA455-2019/data/intuit75k.rds"))
+
+## change variable types for 5 factor variables
+intuit75k <- mutate_at(intuit75k, .vars = vars(zip_bins, bizflag, version1, owntaxprod, upgraded), .funs = funs(as_factor))
+
+### create 00801 and 00804 bin
+
+intuit75k <- intuit75k %>% 
+  mutate(zip801 = ifelse(zip == "00801", "Yes", "No"),
+         zip804 = ifelse(zip == "00804", "Yes", "No"))
+
+
+###split the data into train and test.
+
+intuit75k_train <- intuit75k %>%
+  filter(training == 1) %>% 
+  select(-id, -zip, -training) %>% 
+  mutate_if(is.character, as.factor) %>% 
+  mutate(res1 = as.factor(ifelse(res1 == "Yes",1,0)))
+
+intuit75k_test <- intuit75k %>%
+  filter(training == 0) %>% 
+  select(-id, -zip, -training) %>% 
+  mutate_if(is.character, as.factor) %>% 
+  mutate(res1 = as.factor(ifelse(res1 == "Yes",1,0)))
+
+```
+
+#### Random Forest
+
+First we trained a random forest model with default parameters and saved predictions for later comparison.
+
+```{r}
+rf_model <- randomForest(formula = res1 ~ . , data = intuit75k_train, type = "classification")
+
+plot(rf_model)
+
+pred <- predict(rf_model, newdata = intuit75k_test, type = "prob")
+intuit75k_test$pred_rf_default <- pred[,2]
+
+```
+
+Next we tuned parameters including mtry, node side and sample size and tracked AUC of each model. 
+
+```{r eval = FALSE}
+# hyper parameter tuning
+mtry <- seq(4, 10, 2)
+nodesize <- seq(4,12,2)
+sampsize <- nrow(intuit75k_train) * c(0.6, 0.7, 0.8, 0.9)
+
+# build parameters matrix and keep auc performance
+params <- expand.grid(mtry, nodesize, sampsize)
+params$auc <- NA
+colnames(params) <- c("mtry", "nodesize", "sampsize", "auc")
+
+# train random forest models and keep track of test data performance
+for (i in 1:nrow(params)){
+  rf_tune <- randomForest(formula = res1 ~ . , data = intuit75k_train, 
+                          type = "classification", mtry = params[i,1], nodesize = params[i,2],
+                          sampsize = params[i,3])
+  
+  pred_tune <- predict(rf_tune, newdata = intuit75k_test, type = "prob")
+  auc <- auc(intuit75k_test$res1, pred_tune[,2])
+  params[i,4] <- auc
+
+}
+
+saveRDS(params, "rf_tune.rds")
+
+```
+
+
+```{r}
+# load the tune results and check top performers 
+rf_tune <- readRDS("data/rf_tune.rds")
+
+rf_tune %>% 
+  top_n(auc, n = 5) 
+  
+
+```
+
+Based on our previous tuning results, we split our parameters into smaller units and train our models.
+
+```{r eval = FALSE}
+
+# hyper parameter tuning
+mtry <- c(4,5,6)
+nodesize <- seq(8,12,1)
+sampsize <- nrow(intuit75k_train) * c(0.6, 0.7)
+
+# build parameters matrix and keep auc performance
+params2 <- expand.grid(mtry, nodesize, sampsize)
+params2$auc <- NA
+colnames(params2) <- c("mtry", "nodesize", "sampsize", "auc")
+
+# train random forest models and keep track of test data performance
+for (i in 1:nrow(params2)){
+  rf_tune <- randomForest(formula = res1 ~ . , data = intuit75k_train, 
+                          type = "classification", mtry = params2[i,1], nodesize = params2[i,2],
+                          sampsize = params2[i,3])
+  
+  pred_tune <- predict(rf_tune, newdata = intuit75k_test, type = "prob")
+  auc <- auc(intuit75k_test$res1, pred_tune[,2])
+  params2[i,4] <- auc
+
+}
+
+saveRDS(params2, "rf_tune2.rds")
+
+```
+
+```{r}
+# load the tune results and check top performers 
+rf_tune2 <- readRDS("data/rf_tune2.rds")
+
+rf_tune2 %>% 
+  top_n(auc, n = 5) 
+  
+```
+
+After 2nd round of hyperparameters tuning, we decide to use 5 top performing random forest models in terms of auc and calculate expected profits. 
+
+```{r}
+optimal_params <- rf_tune2 %>% 
+  arrange(desc(auc)) %>% 
+  top_n(auc, n = 5) %>% 
+  select(-auc)
+
+rf_preds <- matrix(NA, ncol = nrow(optimal_params), nrow = nrow(intuit75k_test))
+
+for (i in 1:nrow(optimal_params)){
+  rf_tune <- randomForest(formula = res1 ~ . , data = intuit75k_train, 
+                          type = "classification", mtry = optimal_params[i,1], 
+                          nodesize = optimal_params[i,2],
+                          sampsize = optimal_params[i,3])
+  
+  pred_tune <- predict(rf_tune, newdata = intuit75k_test, type = "prob")
+  
+  rf_preds[,i] <- pred_tune[,2]
+}
+
+# cbind the predictions to intuit75_test dataframe and put into evaluations
+colnames(rf_preds) <- paste0(rep("random_forest", 5), c(1:5))
+intuit75k_test <- cbind(intuit75k_test, rf_preds)
+
+vars <- tail(colnames(intuit75k_test), 6)
+
+model_eval(intuit75k_test, vars)
+cm(intuit75k_test, vars)
+lift_gain_plot(intuit75k_test, vars)
+```
