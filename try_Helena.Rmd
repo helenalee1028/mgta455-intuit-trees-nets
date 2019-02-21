@@ -107,7 +107,7 @@ for (i in 1:nrow(params)){
                   n.trees = 100)
   print(i)
   pred_tune <- predict(gbm_tune, newdata = test, type = "response", n.trees = 100)
-  auc <- auc(pred_tune, test$res1)
+  auc <- ModelMetrics::auc(test$res1, pred_tune)
   params[i,4] <- auc
 
 }
@@ -273,6 +273,7 @@ gbm_final <- gbm(formula = res1 ~ zip_bins + numords + dollars + last + version1
   shrinkage = shrinkage,
   n.trees = 100)
 
+set.seed(123)
 pred_gbm <- predict(gbm_final, newdata = test_gbm, type = "response", n.trees = 100)
 saveRDS(pred_gbm, "data/pred_gbm.rds")
 ```

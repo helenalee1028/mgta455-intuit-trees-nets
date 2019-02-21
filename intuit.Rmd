@@ -97,7 +97,7 @@ library(gbm)
 library(tidyverse)
 library(rpart)
 library(ipred)
-
+library(ggplot2)
 ```
 
 ### Data file import and pre-processing 
@@ -197,6 +197,7 @@ model_eval <- function(dat, vars){
     eval_df[i,] <- perf_vec
   }
   
+  eval_df[,2:6] <- lapply(eval_df[,2:6], as.numeric)
   return(eval_df) 
 }
 
@@ -256,7 +257,64 @@ lift_gain_plot <- function(dat, vars){
 ```
 
 ```{r, child = "try_Helena.Rmd"}
+
 ```
 
 ```{r, child = "xgboost.Rmd"}
+
 ```
+
+### Final Comparison and Evaluation
+```{r}
+final_eval <- intuit75k %>% 
+  filter(training == 0) %>% 
+  select(id, res1)
+
+rf_preds <- readRDS("data/rf_preds.rds")
+rf_best <- rf_preds[,5]
+
+gbm_best <- readRDS("data/pred_gbm.rds")
+
+xgb_best <- readRDS("data/xgb_best.rds")
+
+# ensemble probabilities from 2 best and 3 best models
+ensemble_2m <- (gbm_best + xgb_best)/2
+ensemble_3m <- (gbm_best + xgb_best + rf_best)/3
+
+# comparison among 3 best predictions from each type of algorigthms
+final_eval <- cbind(final_eval, rf_best, gbm_best, xgb_best, ensemble_2m, ensemble_3m)
+vars <- c("rf_best", "gbm_best", "xgb_best", "ensemble_2m", "ensemble_3m")
+eval_df <- model_eval(final_eval, vars)
+
+
+eval_df %>% 
+  select(var, profit, ROME) %>% 
+  gather(key = "measure", value = value, - var) %>% 
+  ggplot(aes(x = var, y = value)) +
+  geom_bar(stat = "identity", fill = "dodgerblue1", alpha = 0.7) + 
+  facet_wrap(~measure,scales= "free_y",ncol= 1)+
+  geom_text(aes(label=format_nr(value,mark = ",",dec= 2)), vjust = 1) + 
+  labs(main = "Profit & ROME Comparison", 
+       x = "Model")
+
+```
+
+```{r fig.height=10, fig.width=7}
+lift_gain_plot(final_eval, vars)
+cm(final_eval, vars)
+```
+
+From profit and ROME comparisons we can see that the ensemble result of GBM and XGB perform the best in terms of expected profits. Though random forest has the highest ROME, it has higher risk of missing potential customers. Therefore, we favor the model with highest expected profits.
+
+In lift and gain charts, all gradient based models perform quite similar while random forest performs the worst. In confusion matrix term, again emsemble_2m is one of the best models in terms of both AUC and TRP. 
+
+Therefore, we use predicted probabilities in Ensemble_2m to determine whom to mail during wave-2 promotions.
+
+```{r}
+targets <- final_eval %>% 
+  mutate(mailto_wave2 = ifelse(ensemble_2m > 2*breakeven_rate, "TRUE", "FALSE")) %>% 
+  select(id, mailto_wave2)
+
+saveRDS(targets, "data/Menghui_Shumeng_Wenrui_Group10.rds")
+```
+

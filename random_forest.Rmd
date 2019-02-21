@@ -4,6 +4,7 @@
 First we trained a random forest model with default parameters and saved predictions for later comparison.
 
 ```{r fig.height=5}
+library(randomForest)
 rf_model <- randomForest(formula = res1 ~ . , data = intuit75k_train, type = "classification")
 
 pred <- predict(rf_model, newdata = intuit75k_test, type = "prob")
@@ -124,5 +125,6 @@ intuit75k_test$res1 <- ifelse(intuit75k_test$res1 == 1, "Yes", "No")
 vars <- tail(colnames(intuit75k_test), 6)
 
 model_eval(intuit75k_test, vars)
+
 
 ```
