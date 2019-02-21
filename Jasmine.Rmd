@@ -171,9 +171,46 @@ intuit75k_test$`pred_xgb` <- pred
 model_eval(intuit75k_test, 'pred_xgb')
 ```
 
-
+Random search
 ```{r}
+nrounds_ = seq(20,30,1)
+objective_ = "binary:logistic"
+eta_ <- c(0.2)
+max_depth_ <- c(6)
+subsample_ <- seq(0.4,1,0.1)
+colsample_bytree_ <- seq(0.4,1,0.1)
+gamma_ <- c(0,0.2,0.1)
+min_child_weight_ <- seq(1,5,1)
 
+df <- as.data.frame(matrix(NA, ncol = 9, nrow = 100))
+colnames(df) <- c('nrounds','objective','eta','max_depth','subsample','colsample_bytree','gamma','min_child_weight','min_child_weight')
+for (i in 1:100){
+  
+  nrounds <- sample(nrounds,1)
+  objective <- sample(objective_,1)
+  eta <- sample(eta_,1)
+  max_depth <- sample(max_depth_,1)
+  subsample<- sample(subsample_,1)
+  colsample_bytree <- sample(colsample_bytree_,1)
+  gamma <- sample(gamma_,1)
+  min_child_weight <- sample(min_child_weight_,1)
+  
+  
+  temp <- data.frame('nrounds' = nrounds,'objective' = objective,
+"eta" = eta,'max_depth' =max_depth ,'subsample' =subsample, 'colsample_bytree' =colsample_bytree ,'gamma' = gamma,'min_child_weight' = min_child_weight)
+  params <- as.list(temp)
+  x <-c(nrounds,objective,eta,max_depth,subsample,colsample_bytree,gamma,min_child_weight)
+  
+  xgb <- xgb.train(
+    nrounds =nrounds,
+    params = as.list(params[-1]),
+    data = dtrain,
+    watchlist = list(val = dtest, train = dtrain),
+    print_every_n = 5,
+    eval_metric = "auc")
+  auc_ <- tail(xgb$evaluation_log$val_auc,1)
+  x <- c(x,auc_)
+  df[i,] <-x
 
+}
 
-```
