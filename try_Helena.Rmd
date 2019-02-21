@@ -251,12 +251,41 @@ breakeven_rate <- mail_cost/margin_revenue
 vars_vec = c('decision_tree_pred','bagging_pred','treebag_pred','random_forest_pred','tuning_random_forest_pred','gbm_pred')
 model_eval(test,vars_vec)
 ```
-The model with outstanding profits are gbm and xgb, so we will focus on tuning the hyparameters of these two models.
+The model with outstanding profits is gbm, so we will focus on tuning the hyparameters of this model.
 
 ```{r}
 # hyper parameter tuning
+interaction.depth <- c(2,4,6)
+shrinkage <- c(0.001, 0.01, 0.1)
+cv.folds <- c(2,4,6)
 
+# build parameters matrix and keep auc performance
+params <- expand.grid(interaction.depth, shrinkage, cv.folds)
+params$auc <- NA
+colnames(params) <- c("interaction.depth", "shrinkage", "cv.folds", "auc")
 
+train$res1 <- ifelse(train$res1 == "Yes", 1, 0)
+test$res1 <- ifelse(test$res1 == "Yes", 1, 0)
+
+train = train[,-c(1,2)]
+test = test[,-c(1,2)]
+
+# train gbm models and keep track of test data performance
+for (i in 1:nrow(params)){
+  set.seed(123)
+  gbm_tune <- gbm(formula = res1 ~ . , 
+                  data = train, 
+                  distribution = "bernoulli", 
+                  interaction.depth = params[i,1],
+                  shrinkage = params[i,2],
+                  cv.folds = params[i,3],
+                  n.trees = 100)
+  print(i)
+  pred_tune <- predict(gbm_tune, newdata = test, type = "response", n.trees = 100)
+  auc <- auc(pred_tune, test$res1)
+  params[i,4] <- auc
+
+}
 
 saveRDS(params, "gbm_tune.rds")
 
