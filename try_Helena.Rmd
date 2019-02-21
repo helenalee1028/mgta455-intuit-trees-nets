@@ -237,11 +237,13 @@ test$tuning_random_forest_pred = predict(object = tuning_random_forest, newdata 
 
 ## gbm
 ```{r}
-train$res1 <- ifelse(train$res1 == "Yes", 1, 0)
-test$res1 <- ifelse(test$res1 == "Yes", 1, 0)
-gbm = gbm(formula = res1 ~  zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, distribution = 'bernoulli', data = train, n.trees = 100)
-test$gbm_pred = predict.gbm(object = gbm, newdata = test, type = 'response',n.trees = 100)
-test$res1 <- ifelse(test$res1 == 1, 'Yes', 'No')
+test_gbm = test
+train_gbm = train
+train_gbm$res1 <- ifelse(train_gbm$res1 == "Yes", 1, 0)
+test_gbm$res1 <- ifelse(test_gbm$res1 == "Yes", 1, 0)
+
+gbm = gbm(formula = res1 ~  zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, distribution = 'bernoulli', data = train_gbm, n.trees = 100)
+test$gbm_pred = predict.gbm(object = gbm, newdata = test_gbm, type = 'response',n.trees = 100)
 ```
 
 ```{r}
@@ -298,6 +300,7 @@ params %>%
 
 ```{r}
 # based on our previous tuning results, we'll split our parameters into smaller units and train our models
+params2 <- readRDS("gbm_tune2.rds")
 
 # hyper parameter tuning
 interaction.depth <- c(3,4,5)
@@ -336,7 +339,7 @@ params2 %>%
 After 2nd round of hyperparameters tuning, we decide to use 8 top performing gbm models in terms of auc and calculate expected profits, since higher AUC doesn't mean higher profit.
 
 ```{r}
-params2 <- readRDS("gbm_tune2.rds")
+
 optimal_params_gbm <- params2 %>% 
 arrange(desc(auc)) %>% 
 top_n(auc, n = 8) %>% 
