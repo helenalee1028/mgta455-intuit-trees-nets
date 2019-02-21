@@ -1,14 +1,47 @@
 ## Xgboost
 
-#### Data preparation
+#### Data file import and pre-processing 
+
+```{r}
+## loading the data. Note that data must be loaded from Dropbox/MGTA455-2019/data
+intuit75k_k <- readr::read_rds(file.path(radiant.data::find_dropbox(), "MGTA455-2019/data/intuit75k.rds"))
+
+## change variable types for 5 factor variables
+intuit75k_k <- mutate_at(intuit75k_k, .vars = vars(zip_bins, bizflag, version1, owntaxprod, upgraded), .funs = funs(as_factor))
+
+### create 00801 and 00804 bin
+
+intuit75k_k <- intuit75k_k %>% 
+  mutate(zip801 = ifelse(zip == "00801", "Yes", "No"),
+         zip804 = ifelse(zip == "00804", "Yes", "No"))
+
+intuit75k_k <- mutate_at(intuit75k_k, .vars = vars(zip801,zip804), .funs = funs(as_factor))
+
+###split the data into train and test.
+
+
+intuit75k_train_k <- intuit75k_k %>%
+  filter(training == 1) %>% 
+  select(-id, -zip, -training) %>% 
+  mutate_if(is.character, as.factor) %>% 
+  mutate(res1 = as.factor(ifelse(res1 == "Yes",1,0)))
+
+intuit75k_test_k <- intuit75k_k %>%
+  filter(training == 0) %>% 
+  select(-id, -zip, -training) %>% 
+  mutate_if(is.character, as.factor) %>% 
+  mutate(res1 = as.factor(ifelse(res1 == "Yes",1,0)))
+
+
+```
 
 ```{r}
 library(xgboost)
 library(caret)
 ## change zip and sex to dummy variable
-temp <- dummyVars(~zip_bins +sex ,data = intuit75k_train)
-pred <- predict(temp, newdata = intuit75k_train)
-intuit75k_xgb_train <- intuit75k_train %>%
+temp <- dummyVars(~zip_bins +sex ,data = intuit75k_train_k)
+pred <- predict(temp, newdata = intuit75k_train_k)
+intuit75k_xgb_train <- intuit75k_train_k %>%
   cbind(pred) %>%
   select(-c('sex','zip_bins','zip_bins.1','sex.Female')) %>%
   mutate(zip801 = ifelse(zip801 == 'Yes',1,0),
@@ -21,9 +54,9 @@ intuit75k_xgb_train <- intuit75k_train %>%
          res1 = as.numeric(res1)-1)
 
 # same operation on test set
-temp <- dummyVars(~zip_bins +sex ,data = intuit75k_test)
-pred <- predict(temp, newdata = intuit75k_test)
-intuit75k_xgb_test <- intuit75k_test %>%
+temp <- dummyVars(~zip_bins +sex ,data = intuit75k_test_k)
+pred <- predict(temp, newdata = intuit75k_test_k)
+intuit75k_xgb_test <- intuit75k_test_k %>%
   cbind(pred) %>%
   select(-c('sex','zip_bins','zip_bins.1','sex.Female')) %>%
   mutate(zip801 = ifelse(zip801 == 'Yes',1,0),
