@@ -47,7 +47,7 @@ pre, code, pre code {
 }
 </style>
 
-## Setup
+### Setup
 
 Please complete this R-markdown document with your group by working through the guidelines in `intuit-trees-nets.pdf` on Dropbox (week7/readings/). Create an HTML file with all your results and comments and push both the Rmarkdown and HTML file to GitLab when your team is done. All results MUST be reproducible (i.e., the TA and I must be able to recreate the HTML from the Rmarkdown file without changes or errors). Also, make sure the code is well commented and formatted (e.g., use styler through Addins > Style active file in Rstudio).
 
@@ -114,8 +114,14 @@ intuit75k_test <- intuit75k %>%
 
 ```
 
-#### Evaluation Functions
+### Evaluation Functions
 ```{r}
+mail_cost <- 1.41
+margin_revenue <- 60
+breakeven_rate <- mail_cost/margin_revenue
+
+overall_val_resp <- mean(intuit75k_test$res1 == "Yes")
+
 cm <- function(dat, vars){
   
   cm_df <- as.data.frame(matrix(NA, ncol = 3, nrow = length(vars)))
@@ -225,6 +231,11 @@ lift_gain_plot <- function(dat, vars){
 
 ```
 
-
 ```{r, child = "random_forest.Rmd"}
+```
+
+```{r, child = "try_Helena.Rmd"}
+```
+
+```{r, child = ".Rmd"}
 ```

@@ -5,50 +5,15 @@ library(ModelMetrics)
 library(gbm)
 ```
 
-#### Data import and pre-processing
-```{r}
-## loading the data. Note that data must be loaded from the data/
-## in the rstudio project directory
-intuit75k <- readr::read_rds(file.path(radiant.data::find_dropbox(), "MGTA455-2019/data/intuit75k.rds"))
-
-## change variable types for 5 factor variables
-intuit75k <- mutate_at(intuit75k, .vars = vars(zip_bins, bizflag, version1, owntaxprod, upgraded), .funs = funs(as_factor))
-
-### create 00801 and 00804 bin
-
-intuit75k <- intuit75k %>% 
-  mutate(zip801 = ifelse(zip == "00801", "Yes", "No"),
-         zip804 = ifelse(zip == "00804", "Yes", "No"))
-
-
-###split the data into train and test.
-
-intuit75k_train <- intuit75k %>%
-  filter(training == 1) %>% 
-  select(-id, -zip, -training) %>% 
-  mutate_if(is.character, as.factor) %>% 
-  mutate(res1 = as.factor(ifelse(res1 == "Yes",1,0)))
-
-intuit75k_test <- intuit75k %>%
-  filter(training == 0) %>% 
-  select(-id, -zip, -training) %>% 
-  mutate_if(is.character, as.factor) %>% 
-  mutate(res1 = as.factor(ifelse(res1 == "Yes",1,0)))
-
-```
-
-#### Random Forest
+### Random Forest
 
 First we trained a random forest model with default parameters and saved predictions for later comparison.
 
-```{r}
+```{r fig.height=5}
 rf_model <- randomForest(formula = res1 ~ . , data = intuit75k_train, type = "classification")
-
-plot(rf_model)
 
 pred <- predict(rf_model, newdata = intuit75k_test, type = "prob")
 intuit75k_test$pred_rf_default <- pred[,2]
-
 ```
 
 Next we tuned parameters including mtry, node side and sample size and tracked AUC of each model. 
@@ -158,6 +123,5 @@ intuit75k_test <- cbind(intuit75k_test, rf_preds)
 vars <- tail(colnames(intuit75k_test), 6)
 
 model_eval(intuit75k_test, vars)
-cm(intuit75k_test, vars)
-lift_gain_plot(intuit75k_test, vars)
+
 ```
