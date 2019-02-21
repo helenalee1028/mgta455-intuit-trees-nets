@@ -224,6 +224,6 @@ AUC <- tail(xgb$evaluation_log$val_auc,1)
 
 pred = predict(xgb, dtest)
 intuit75k_test$`pred_xgb` <- pred
-model_eval(intuit75k_test, 'pred_xgb')
+#model_eval(intuit75k_test, 'pred_xgb')
 
 ```
