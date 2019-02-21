@@ -246,6 +246,7 @@ gbm = gbm(formula = res1 ~  zip_bins + numords + dollars + last + version1 + own
 test$gbm_pred = predict.gbm(object = gbm, newdata = test_gbm, type = 'response',n.trees = 100)
 ```
 
+
 ```{r}
 mail_cost <- 1.41
 margin_revenue <- 60
