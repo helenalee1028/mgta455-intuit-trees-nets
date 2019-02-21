@@ -93,9 +93,11 @@ for (i in 1:nrow(params)){
 }
 params$auc <- auc
 params$train_auc <- train_auc
-saveRDS(params, "xgb_tune.rds")
+saveRDS(params, "data/xgb_tune.rds")
+```
 
-readRDS("xgb_tune.rds")
+```{r}
+readRDS("data/xgb_tune.rds")
 ```
 From the table storing all combinations and auc value, we can decide on the best eta is 0.2. Also, the best nround would be something between 20 and 30. We then use this for further tuning. AS max_depth = 6 does better than max_depth = 7 or 8, we draw the conclusion that the best max_depth would be something smaller than 6. 
 
@@ -143,7 +145,15 @@ for (i in 1:100){
 
 }
 
-arrange(df, desc(df$auc))[1:10, ]
+df <- arrange(df, desc(df$auc))
+saveRDS(df, "data/df.rds")
+#xgb_tune <- xgb_tune[,-4]
+
+```
+
+```{r}
+df_read <-readRDS("data/df.rds")
+df_read[1:10,]
 ```
 
 From the stored dataframe, we calculate the average parameters of the top 10 rows. We found the best max_depth is 4, best subsample is between 0.8 and 1, colsample is alse between 0.8 and 1. Gamma = 0 is better. 
@@ -186,10 +196,13 @@ for (i in 1:nrow(params)){
 }
 params$auc <- auc
 params$train_auc <- train_auc
-saveRDS(params, "xgb_tune_all.rds")
+saveRDS(params, "data/xgb_tune_all.rds")
 #xgb_tune <- xgb_tune[,-4]
+```
 
-readRDS("xgb_tune_all.rds")
+```{r}
+tune_all <-readRDS("data/xgb_tune_all.rds")
+tune_all
 ```
 
 
