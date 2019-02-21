@@ -22,21 +22,14 @@ intuit75k <- intuit75k %>%
   mutate(zip801 = ifelse(zip == "00801", "Yes", "No"),
          zip804 = ifelse(zip == "00804", "Yes", "No"))
 
-intuit75k <- mutate_at(intuit75k, .vars = vars(zip801,zip804), .funs = funs(as_factor))
+intuit75k <- mutate_at(intuit75k, .vars = vars(zip_bins, bizflag, version1, owntaxprod, upgraded, zip801, zip804), .funs = funs(as.factor))
 
-###split the data into train and test.
+train = intuit75k %>%
+  filter(training == 1)
 
-train <- intuit75k %>%
-  filter(training == 1) %>% 
-  select(-id, -zip, -training) %>% 
-  mutate_if(is.character, as.factor) %>% 
-  mutate(res1 = as.factor(ifelse(res1 == "Yes",1,0)))
+test = intuit75k %>%
+  filter(training == 0)
 
-test <- intuit75k %>%
-  filter(training == 0) %>% 
-  select(-id, -zip, -training) %>% 
-  mutate_if(is.character, as.factor) %>% 
-  mutate(res1 = as.factor(ifelse(res1 == "Yes",1,0)))
 ```
 
 ```{r}
@@ -68,6 +61,7 @@ test_gbm$res1 <- ifelse(test_gbm$res1 == "Yes", 1, 0)
 
 gbm = gbm(formula = res1 ~  zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, distribution = 'bernoulli', data = train_gbm, n.trees = 100)
 test$gbm_pred = predict.gbm(object = gbm, newdata = test_gbm, type = 'response',n.trees = 100)
+
 ```
 
 
@@ -272,7 +266,7 @@ opt_pos <- which.max(gbm_tune1_model_eval$profit)
 shrinkage <- optimal_params_gbm[opt_pos,2]
 interaction_depth <- optimal_params_gbm[opt_pos, 1]
 
-gbm_final <- gbm(formula = res1 ~ . , 
+gbm_final <- gbm(formula = res1 ~ zip_bins + numords + dollars + last + version1 + owntaxprod + upgraded + zip801 + zip804, 
   data = train_gbm, 
   distribution = "bernoulli", 
   interaction.depth = interaction_depth,
@@ -280,6 +274,6 @@ gbm_final <- gbm(formula = res1 ~ . ,
   n.trees = 100)
 
 pred_gbm <- predict(gbm_final, newdata = test_gbm, type = "response", n.trees = 100)
-
+saveRDS(pred_gbm, "data/pred_gbm.rds")
 ```
 

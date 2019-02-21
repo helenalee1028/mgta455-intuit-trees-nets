@@ -1,12 +1,46 @@
-### Xgboost
+## Xgboost
 
-#### Data pre-processing
+#### Data file import and pre-processing 
 
 ```{r}
+## loading the data. Note that data must be loaded from Dropbox/MGTA455-2019/data
+intuit75k_k <- readr::read_rds(file.path(radiant.data::find_dropbox(), "MGTA455-2019/data/intuit75k.rds"))
+
+## change variable types for 5 factor variables
+intuit75k_k <- mutate_at(intuit75k_k, .vars = vars(zip_bins, bizflag, version1, owntaxprod, upgraded), .funs = funs(as_factor))
+
+### create 00801 and 00804 bin
+
+intuit75k_k <- intuit75k_k %>% 
+  mutate(zip801 = ifelse(zip == "00801", "Yes", "No"),
+         zip804 = ifelse(zip == "00804", "Yes", "No"))
+
+intuit75k_k <- mutate_at(intuit75k_k, .vars = vars(zip801,zip804), .funs = funs(as_factor))
+
+###split the data into train and test.
+
+
+intuit75k_train_k <- intuit75k_k %>%
+  filter(training == 1) %>% 
+  select(-id, -zip, -training) %>% 
+  mutate_if(is.character, as.factor) %>% 
+  mutate(res1 = as.factor(ifelse(res1 == "Yes",1,0)))
+
+intuit75k_test_k <- intuit75k_k %>%
+  filter(training == 0) %>% 
+  select(-id, -zip, -training) %>% 
+  mutate_if(is.character, as.factor) %>% 
+  mutate(res1 = as.factor(ifelse(res1 == "Yes",1,0)))
+
+
+```
+
+```{r}
+
 ## change zip and sex to dummy variable
-temp <- dummyVars(~zip_bins +sex ,data = intuit75k_train)
-pred <- predict(temp, newdata = intuit75k_train)
-intuit75k_xgb_train <- intuit75k_train %>%
+temp <- dummyVars(~zip_bins +sex ,data = intuit75k_train_k)
+pred <- predict(temp, newdata = intuit75k_train_k)
+intuit75k_xgb_train <- intuit75k_train_k %>%
   cbind(pred) %>%
   select(-c('sex','zip_bins','zip_bins.1','sex.Female')) %>%
   mutate(zip801 = ifelse(zip801 == 'Yes',1,0),
@@ -19,9 +53,9 @@ intuit75k_xgb_train <- intuit75k_train %>%
          res1 = as.numeric(res1)-1)
 
 # same operation on test set
-temp <- dummyVars(~zip_bins +sex ,data = intuit75k_test)
-pred <- predict(temp, newdata = intuit75k_test)
-intuit75k_xgb_test <- intuit75k_test %>%
+temp <- dummyVars(~zip_bins +sex ,data = intuit75k_test_k)
+pred <- predict(temp, newdata = intuit75k_test_k)
+intuit75k_xgb_test <- intuit75k_test_k %>%
   cbind(pred) %>%
   select(-c('sex','zip_bins','zip_bins.1','sex.Female')) %>%
   mutate(zip801 = ifelse(zip801 == 'Yes',1,0),
@@ -48,7 +82,7 @@ dtrain <- xgb.DMatrix(data = X_train, label = y_train)
 
 #### Tune general parameter in xgboost model--nrounds, eta and max_depth
 
-First, tune general parameters -- nrounds, eta and max_depth because they are hyperparameters and may better be trained at first. As for other parameters, we choose to use default value in this round.
+First, tune general parameters --nrounds, eta and max_depth because they are hyperparameters and may better be trained at first. As for other parameters, we choose to use default value in this round.
 
 ```{r eval = FALSE}
 ## create vector storing paremeters. 
@@ -86,10 +120,10 @@ saveRDS(params, "data/xgb_tune.rds")
 ```{r}
 readRDS("data/xgb_tune.rds")
 ```
-From the table with all combinations and auc values, we can tell that the best eta is 0.2. Also, the best nround would be something between 20 and 30. We then use this for further tuning. As max_depth of 6 does better than max_depth of 7 or 8, we conclude that the best max_depth would be something smaller than 6. 
+From the table storing all combinations and auc value, we can decide on the best eta is 0.2. Also, the best nround would be something between 20 and 30. We then use this for further tuning. AS max_depth = 6 does better than max_depth = 7 or 8, we draw the conclusion that the best max_depth would be something smaller than 6. 
 
-Second,we create a random search and generate random combinations of parameters to find the best-performed models. We can afford to test parameters with wider range in random search compared to grid search. We use random search to narrow down parameter range and then put into gird search to get more accurate values.
 
+Second,we create a random search, we generate random combinations of parameters and to find the best for the models. We can afford to test parameters with wider range in random search compared to grid search. We use randome search to narrow down parameter range and then put into gird search to get more accurate values.
 ```{r eval = FALSE}
 nrounds_ = seq(20,30,1)
 objective_ = "binary:logistic"
@@ -134,6 +168,7 @@ for (i in 1:100){
 
 df <- arrange(df, desc(df$auc))
 saveRDS(df, "data/df.rds")
+#xgb_tune <- xgb_tune[,-4]
 
 ```
 
@@ -142,10 +177,10 @@ df_read <-readRDS("data/df.rds")
 df_read[1:10,]
 ```
 
-From the stored dataframe, we calculate the average parameters of the top 10 rows. We found the best max_depth is 4, best subsample between 0.8 and 1, colsample also between 0.8 and 1. Gamma = 0 is better. 
+From the stored dataframe, we calculate the average parameters of the top 10 rows. We found the best max_depth is 4, best subsample is between 0.8 and 1, colsample is alse between 0.8 and 1. Gamma = 0 is better. 
+
 
 Then we do grid search for more accurate estimate for nrounds,subsample and min_child_weight.
-
 ```{r eval = FALSE}
 ## First tune best nrounds
 nrounds = c(20,30)
@@ -191,14 +226,13 @@ tune_all <-readRDS("data/xgb_tune_all.rds")
 tune_all
 ```
 
+
 From the result, the best nrounds is 30, eta = 0.2,max_depth = 4, subsample is 0.8, colsamply_bytree is 0.8, gamma is 0. min_child_weight is 10.
 
 #### Train best xgboost model and make prediction
 
 We trained our best model, make prediction on test set and store the estimated probability is stored in column 'pred_xgb' in dataframe 'intuit75k_test'.
-
-Based on this model, the estimated profit for wave-2 emailing would be around $440,000 dollars.
-
+Based on this model, estimated profit of 2-wave emailing would be about 440000 dollars.
 ```{r}
 params <- list(
   objective = "binary:logistic",
@@ -209,6 +243,7 @@ params <- list(
   subsample = 0.8
   #gamma = 10
 )
+
 
 xgb <- xgb.train(
     nrounds = 30,
@@ -221,7 +256,7 @@ AUC <- tail(xgb$evaluation_log$val_auc,1)
 
 pred = predict(xgb, dtest)
 intuit75k_test$`pred_xgb` <- pred
-model_eval(intuit75k_test, 'pred_xgb')
+#model_eval(intuit75k_test, 'pred_xgb')
 
 saveRDS(pred, "data/xgb_best.rds")
 
