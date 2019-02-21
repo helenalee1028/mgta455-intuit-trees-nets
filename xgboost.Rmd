@@ -12,6 +12,7 @@ knitr::opts_chunk$set(echo = TRUE)
 # Xgboost
 
 ## Data preparation
+
 ```{r}
 library(xgboost)
 library(caret)
@@ -44,6 +45,7 @@ intuit75k_xgb_test <- intuit75k_test %>%
          bizflag =as.numeric(bizflag)-1,
          res1 = as.numeric(res1)-1)
 ```
+
 ## Create xgboost-specific DMatrix
 
 ```{r}
@@ -56,7 +58,10 @@ y_test = intuit75k_xgb_test$res1
 dtest <- xgb.DMatrix(data = X_test, label = y_test)
 dtrain <- xgb.DMatrix(data = X_train, label = y_train)
 ```
-## First tune general parameter in xgboost model--nrounds, eta and max_depth.
+
+## Tune general parameter in xgboost model--nrounds, eta and max_depth
+
+First, tune general parameters --nrounds, eta and max_depth because they are hyperparameters and may better be trained at first. As for other parameters, we choose to use default value in this round.
 
 ```{r,eval = FALSE}
 ## create vector storing paremeters. 
@@ -90,13 +95,12 @@ params$auc <- auc
 params$train_auc <- train_auc
 saveRDS(params, "xgb_tune.rds")
 
-params %>% 
-  top_n(auc, n = 5) 
+readRDS("xgb_tune.rds")
 ```
-From all the 5 best combinations with higher auc, we can decide on the best eta is 0.2. Also, the best nround would be something between 20 and 30. We then use this for further tuning. AS max_depth = 6 does better than max_depth = 7 or 8, we draw the conclusion that the best max_depth would be something smaller than 6. 
+From the table storing all combinations and auc value, we can decide on the best eta is 0.2. Also, the best nround would be something between 20 and 30. We then use this for further tuning. AS max_depth = 6 does better than max_depth = 7 or 8, we draw the conclusion that the best max_depth would be something smaller than 6. 
 
 
-Second,we create a random search, we generate random combinations of the hyperparameters and to find the best for the models. We can afford to test parameters with wider range compared to grid search. We use randome search to narrow down parameter range and then put into gird search to get more accurate values.
+Second,we create a random search, we generate random combinations of parameters and to find the best for the models. We can afford to test parameters with wider range in random search compared to grid search. We use randome search to narrow down parameter range and then put into gird search to get more accurate values.
 ```{r,eval = FALSE}
 nrounds_ = seq(20,30,1)
 objective_ = "binary:logistic"
@@ -145,7 +149,7 @@ arrange(df, desc(df$auc))[1:10, ]
 From the stored dataframe, we calculate the average parameters of the top 10 rows. We found the best max_depth is 4, best subsample is between 0.8 and 1, colsample is alse between 0.8 and 1. Gamma = 0 is better. 
 
 
-Then we do grid search for more accurate estimate.
+Then we do grid search for more accurate estimate for nrounds,subsample and min_child_weight.
 ```{r,eval = FALSE}
 ## First tune best nrounds
 nrounds = c(20,30)
@@ -155,7 +159,7 @@ max_depth <- c(4)
 subsample <- seq(0.8,1,0.2)
 colsample_bytree <- c(0.8)
 gamma <- c(0)
-min_child_weight <- seq(1,5,2)
+min_child_weight <- seq(4,10,3)
 #nrounds = c(20,30,50,100,200,500)
 #eta <- c(0.1,0.2,0.3)
 #max_depth <- c(4,5,6,7,8)
@@ -185,16 +189,15 @@ params$train_auc <- train_auc
 saveRDS(params, "xgb_tune_all.rds")
 #xgb_tune <- xgb_tune[,-4]
 
-params %>% 
-  top_n(auc, n = 10)
+readRDS("xgb_tune_all.rds")
 ```
 
 
-From the result, the best nrounds is 30,eta = 0.2,max_depth = 4, subsample is 0.8, colsamply_bytree is 0.8, gamma is 0. min_child_weight is 10.
+From the result, the best nrounds is 30, eta = 0.2,max_depth = 4, subsample is 0.8, colsamply_bytree is 0.8, gamma is 0. min_child_weight is 10.
 
 
-We trained our best model, make prediction on test set and generate profit estimation.
-
+We trained our best model, make prediction on test set and store the estimated probability is stored in column 'pred_xgb' in dataframe 'intuit75k_test'.
+Based on this model, estimated profit of 2-wave emailing would be about 440000 dollars.
 ```{r}
 params <- list(
   objective = "binary:logistic",
