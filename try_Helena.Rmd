@@ -301,7 +301,6 @@ params %>%
 
 ```{r}
 # based on our previous tuning results, we'll split our parameters into smaller units and train our models
-params2 <- readRDS("gbm_tune2.rds")
 
 # hyper parameter tuning
 interaction.depth <- c(3,4,5)
@@ -340,37 +339,41 @@ params2 %>%
 After 2nd round of hyperparameters tuning, we decide to use 8 top performing gbm models in terms of auc and calculate expected profits, since higher AUC doesn't mean higher profit.
 
 ```{r}
+params2 <- readRDS("data/gbm_tune2.rds")
 
 optimal_params_gbm <- params2 %>% 
 arrange(desc(auc)) %>% 
 top_n(auc, n = 8) %>% 
 select(-auc)
 
-gbm_preds <- matrix(NA, ncol = nrow(optimal_params_gbm), nrow = nrow(test))
+train_gbm = train_gbm[,-c(1,2)]
+test_gbm = test_gbm[,-c(1,2)]
+
+gbm_preds <- matrix(NA, ncol = nrow(optimal_params_gbm), nrow = nrow(test_gbm))
 
 for (i in 1:nrow(optimal_params_gbm)){
 set.seed(123)
 gbm_tune <- gbm(formula = res1 ~ . , 
-data = train, 
+data = train_gbm, 
 distribution = "bernoulli", 
 interaction.depth = optimal_params_gbm[i,1],
 shrinkage = optimal_params_gbm[i,2],
 n.trees = 100)
 print(i)
-pred_tune <- predict(gbm_tune, newdata = test, type = "response", n.trees = 100)
+pred_tune <- predict(gbm_tune, newdata = test_gbm, type = "response", n.trees = 100)
 gbm_preds[,i] <- pred_tune
 }
 
 
 # cbind the predictions to intuit75_test dataframe and put into evaluations
 colnames(gbm_preds) <- paste(rep("gbm", 8), c(1:8))
-test <- cbind(test, gbm_preds)
+test_gbm1 <- cbind(test_gbm, gbm_preds)
 
-vars <- tail(colnames(test), 8)
-test$res1 <- ifelse(test$res1 == 1, 'Yes', 'No')
-model_eval(test, vars)
-cm(intuit75k_test, vars)
-lift_gain_plot(intuit75k_test, vars)
+vars <- tail(colnames(test_gbm1), 8)
+test_gbm1$res1 <- ifelse(test_gbm1$res1 == 1, 'Yes', 'No')
+model_eval(test_gbm1, vars)
+cm(test_gbm1, vars)
+lift_gain_plot(test_gbm1, vars)
 ```
 
 Tune n.trees parameter value to 200
