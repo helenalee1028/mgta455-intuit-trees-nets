@@ -223,4 +223,6 @@ pred = predict(xgb, dtest)
 intuit75k_test$`pred_xgb` <- pred
 model_eval(intuit75k_test, 'pred_xgb')
 
+saveRDS(pred, "data/xgb_best.rds")
+
 ```

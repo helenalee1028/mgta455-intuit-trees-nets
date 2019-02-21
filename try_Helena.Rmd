@@ -17,17 +17,26 @@ library(caret)
 
 ```{r}
 ## change variable types for 5 factor variables
+
 intuit75k <- intuit75k %>% 
   mutate(zip801 = ifelse(zip == "00801", "Yes", "No"),
          zip804 = ifelse(zip == "00804", "Yes", "No"))
 
-intuit75k <- mutate_at(intuit75k, .vars = vars(zip_bins, bizflag, version1, owntaxprod, upgraded, zip801, zip804), .funs = funs(as.factor))
+intuit75k <- mutate_at(intuit75k, .vars = vars(zip801,zip804), .funs = funs(as_factor))
 
-train = intuit75k %>%
-  filter(training == 1)
+###split the data into train and test.
 
-test = intuit75k %>%
-  filter(training == 0)
+train <- intuit75k %>%
+  filter(training == 1) %>% 
+  select(-id, -zip, -training) %>% 
+  mutate_if(is.character, as.factor) %>% 
+  mutate(res1 = as.factor(ifelse(res1 == "Yes",1,0)))
+
+test <- intuit75k %>%
+  filter(training == 0) %>% 
+  select(-id, -zip, -training) %>% 
+  mutate_if(is.character, as.factor) %>% 
+  mutate(res1 = as.factor(ifelse(res1 == "Yes",1,0)))
 ```
 
 ```{r}
@@ -117,7 +126,7 @@ saveRDS(params, "gbm_tune.rds")
 gbm_tune = readRDS("data/gbm_tune.rds")
 gbm_tune %>% 
   arrange(desc(auc)) %>% 
-  top_n(auc, 10)
+  top_n(auc, n = 10)
 
 ```
 
@@ -206,6 +215,7 @@ saveRDS(gbm_tune1_model_eval, "data/gbm_tune1_model_eval.rds")
 
 ```{r}
 gbm_tune1_model_eval <- readRDS("data/gbm_tune1_model_eval.rds")
+gbm_tune1_model_eval[,2:6] <- lapply(gbm_tune1_model_eval[,2:6], as.numeric)
 gbm_tune1_model_eval
 
 ```
@@ -249,7 +259,27 @@ saveRDS(gbm_tune2_model_eval, "data/gbm_tune2_model_eval.rds")
 
 ```{r}
 gbm_tune2_model_eval <- readRDS("data/gbm_tune2_model_eval.rds")
+gbm_tune2_model_eval[,2:6] <- lapply(gbm_tune2_model_eval[,2:6], as.numeric)
 gbm_tune2_model_eval
 ```
 
 Thus we can see that using 100 n.trees is better than 200 trees, so for the final model we choose to use 100 n.trees to train the data to prevent overfitting. So the best model we select has the highest profit of $460,358.59 on the test set. It has the hyperparameters of 3 interaction depth, shrinkage of 0.1.
+
+```{r}
+
+# get optimal parameters 
+opt_pos <- which.max(gbm_tune1_model_eval$profit)
+shrinkage <- optimal_params_gbm[opt_pos,2]
+interaction_depth <- optimal_params_gbm[opt_pos, 1]
+
+gbm_final <- gbm(formula = res1 ~ . , 
+  data = train_gbm, 
+  distribution = "bernoulli", 
+  interaction.depth = interaction_depth,
+  shrinkage = shrinkage,
+  n.trees = 100)
+
+pred_gbm <- predict(gbm_final, newdata = test_gbm, type = "response", n.trees = 100)
+
+```
+

@@ -1,9 +1,3 @@
-```{r include=FALSE}
-library(randomForest)
-library(dplyr)
-library(ModelMetrics)
-library(gbm)
-```
 
 ### Random Forest
 
@@ -95,9 +89,9 @@ rf_tune2 %>%
   
 ```
 
-After 2nd round of hyperparameters tuning, we decide to use 5 top performing random forest models in terms of auc and calculate expected profits. 
+After second round of hyperparameters tuning, we decide to use 5 top performing random forest models in terms of auc and calculate expected profits. 
 
-```{r}
+```{r eval=FALSE}
 optimal_params <- rf_tune2 %>% 
   arrange(desc(auc)) %>% 
   top_n(auc, n = 5) %>% 
@@ -116,10 +110,17 @@ for (i in 1:nrow(optimal_params)){
   rf_preds[,i] <- pred_tune[,2]
 }
 
+saveRDS(rf_preds, "data/rf_preds.rds")
+
+```
+
+```{r}
+rf_preds <- readRDS("data/rf_preds.rds")
+
 # cbind the predictions to intuit75_test dataframe and put into evaluations
 colnames(rf_preds) <- paste0(rep("random_forest", 5), c(1:5))
 intuit75k_test <- cbind(intuit75k_test, rf_preds)
-
+intuit75k_test$res1 <- ifelse(intuit75k_test$res1 == 1, "Yes", "No")
 vars <- tail(colnames(intuit75k_test), 6)
 
 model_eval(intuit75k_test, vars)
