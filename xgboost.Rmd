@@ -1,21 +1,10 @@
----
-title: "Jasmine"
-author: "s1shi"
-date: "2/18/2019"
-output: html_document
----
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
+### Xgboost
 
-# Xgboost
-
-## Data preparation
-
+#### Data preparation
 ```{r}
 library(xgboost)
-library(caret)
+
 ## change zip and sex to dummy variable
 temp <- dummyVars(~zip_bins +sex ,data = intuit75k_train)
 pred <- predict(temp, newdata = intuit75k_train)
@@ -46,7 +35,7 @@ intuit75k_xgb_test <- intuit75k_test %>%
          res1 = as.numeric(res1)-1)
 ```
 
-## Create xgboost-specific DMatrix
+#### Create xgboost-specific DMatrix
 
 ```{r}
 X_train = model.matrix(res1~.,intuit75k_xgb_train)
@@ -59,7 +48,7 @@ dtest <- xgb.DMatrix(data = X_test, label = y_test)
 dtrain <- xgb.DMatrix(data = X_train, label = y_train)
 ```
 
-## Tune general parameter in xgboost model--nrounds, eta and max_depth
+#### Tune general parameter in xgboost model--nrounds, eta and max_depth
 
 First, tune general parameters --nrounds, eta and max_depth because they are hyperparameters and may better be trained at first. As for other parameters, we choose to use default value in this round.
 
@@ -73,7 +62,6 @@ max_depth <- c(6,7,8)
 params <- expand.grid(nrounds,objective,eta,max_depth)
 #params$auc <- NA
 colnames(params) <- c("nrounds",'objective', "eta",'max_depth')
-
 
 auc <- c()
 train_auc <-c()
@@ -97,11 +85,13 @@ saveRDS(params, "xgb_tune.rds")
 
 readRDS("xgb_tune.rds")
 ```
+
 From the table storing all combinations and auc value, we can decide on the best eta is 0.2. Also, the best nround would be something between 20 and 30. We then use this for further tuning. AS max_depth = 6 does better than max_depth = 7 or 8, we draw the conclusion that the best max_depth would be something smaller than 6. 
 
 
 Second,we create a random search, we generate random combinations of parameters and to find the best for the models. We can afford to test parameters with wider range in random search compared to grid search. We use randome search to narrow down parameter range and then put into gird search to get more accurate values.
-```{r,eval = FALSE}
+
+```{r eval = FALSE}
 nrounds_ = seq(20,30,1)
 objective_ = "binary:logistic"
 eta_ <- c(0.2)
@@ -143,6 +133,9 @@ for (i in 1:100){
 
 }
 
+```
+
+```{r}
 arrange(df, desc(df$auc))[1:10, ]
 ```
 
@@ -150,7 +143,8 @@ From the stored dataframe, we calculate the average parameters of the top 10 row
 
 
 Then we do grid search for more accurate estimate for nrounds,subsample and min_child_weight.
-```{r,eval = FALSE}
+
+```{r eval = FALSE}
 ## First tune best nrounds
 nrounds = c(20,30)
 objective = "binary:logistic"

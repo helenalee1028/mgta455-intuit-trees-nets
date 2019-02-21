@@ -237,5 +237,5 @@ lift_gain_plot <- function(dat, vars){
 ```{r, child = "try_Helena.Rmd"}
 ```
 
-```{r, child = ".Rmd"}
+```{r, child = "xgboost.Rmd"}
 ```
