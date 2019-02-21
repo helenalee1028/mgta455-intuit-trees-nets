@@ -22,7 +22,7 @@ intuit75k_xgb_train <- intuit75k_train %>%
   mutate(zip801 = ifelse(zip801 == 'Yes',1,0),
          zip804 = ifelse(zip804 == 'Yes',1,0)) %>%
   mutate(upgraded = as.numeric(upgraded)-1,
-         owntaxprod =as.numeric(upgraded)-1,
+         owntaxprod =as.numeric(upgraded),
          version1 = as.numeric(version1)-1,
          bizflag =as.numeric(bizflag)-1,
          res1 = as.numeric(res1)-1)
@@ -36,7 +36,7 @@ intuit75k_xgb_test <- intuit75k_test %>%
   mutate(zip801 = ifelse(zip801 == 'Yes',1,0),
          zip804 = ifelse(zip804 == 'Yes',1,0)) %>%
   mutate(upgraded = as.numeric(upgraded)-1,
-         owntaxprod =as.numeric(upgraded)-1,
+         owntaxprod =as.numeric(upgraded),
          version1 = as.numeric(version1)-1,
          bizflag =as.numeric(bizflag)-1,
          res1 = as.numeric(res1)-1)
