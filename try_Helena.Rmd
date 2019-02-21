@@ -98,7 +98,7 @@ cm <- function(dat, vars){
     
     mailto <- ifelse(pull(dat, !!var) > breakeven_rate, "TRUE", "FALSE") # decide whether to mail or not
     
-    tpr <- sum(resp =="1" & mailto == "TRUE")/sum(resp == "1")
+    tpr <- sum(resp =="Yes" & mailto == "TRUE")/sum(resp == "Yes")
     auc <- ModelMetrics::auc(resp, probs)
     
     cm_vec <- c(var, auc, tpr)
@@ -161,7 +161,7 @@ lift_gain_plot <- function(dat, vars){
       mutate(resp_decile = xtile(probs, n = 10, rev = T)) %>% 
       group_by(resp_decile) %>% 
       summarise(n_customer = n(),
-                n_buyer = sum(resp == "1")) %>%
+                n_buyer = sum(resp == "Yes")) %>%
       mutate(cum_customer = cumsum(n_customer),
              cum_buyer = cumsum(n_buyer),
              cumulative_lift = (cum_buyer/cum_customer)/overall_val_resp,
@@ -252,7 +252,13 @@ mail_cost <- 1.41
 margin_revenue <- 60
 breakeven_rate <- mail_cost/margin_revenue
 vars_vec = c('decision_tree_pred','bagging_pred','treebag_pred','random_forest_pred','tuning_random_forest_pred','gbm_pred')
-model_eval(test,vars_vec)
+
+basic_model_eval = model_eval(test,vars_vec)
+saveRDS(basic_model_eval, "data/basic_model_eval.rds")
+cm(test,vars_vec)
+lift_gain_plot(test,vars_vec)
+basic_model_eval <- readRDS("data/basic_model_eval.rds")
+basic_model_eval
 ```
 The model with outstanding profits is gbm, so we will focus on tuning the hyparameters of this model.
 
@@ -295,6 +301,9 @@ saveRDS(params, "gbm_tune.rds")
 
 params %>% 
   top_n(auc, n = 5) 
+
+gbm_tune = readRDS("data/gbm_tune.rds")
+gbm_tune
 
 ```
 
@@ -383,31 +392,31 @@ arrange(desc(auc)) %>%
 top_n(auc, n = 8) %>% 
 select(-auc)
 
-gbm_preds2 <- matrix(NA, ncol = nrow(optimal_params_gbm2), nrow = nrow(test))
+gbm_preds2 <- matrix(NA, ncol = nrow(optimal_params_gbm2), nrow = nrow(test_gbm))
 
 for (i in 1:nrow(optimal_params_gbm2)){
 set.seed(123)
 gbm_tune <- gbm(formula = res1 ~ . , 
-data = train, 
+data = train_gbm, 
 distribution = "bernoulli", 
 interaction.depth = optimal_params_gbm2[i,1],
 shrinkage = optimal_params_gbm2[i,2],
 n.trees = 200)
 print(i)
-pred_tune <- predict(gbm_tune, newdata = test, type = "response", n.trees = 200)
+pred_tune <- predict(gbm_tune, newdata = test_gbm, type = "response", n.trees = 200)
 gbm_preds2[,i] <- pred_tune
 }
 
 
 # cbind the predictions to intuit75_test dataframe and put into evaluations
 colnames(gbm_preds2) <- paste(rep("gbm2", 8), c(1:8))
-test$res1 <- ifelse(test$res1 == 1, 'Yes', 'No')
-test2 <- cbind(test, gbm_preds2)
-vars2 <- tail(colnames(test2), 8)
+test_gbm2 <- cbind(test_gbm, gbm_preds2)
 
-model_eval(test2, vars2)
-cm(test2, vars2)
-lift_gain_plot(test2, vars2)
+vars2 <- tail(colnames(test_gbm2), 8)
+test_gbm2$res1 <- ifelse(test_gbm2$res1 == 1, 'Yes', 'No')
+model_eval(test_gbm2, vars2)
+cm(test_gbm2, vars2)
+lift_gain_plot(test_gbm2, vars2)
 ```
-
+Thus 
 So the best model we select in the end has the highest profit of 459466.00128 on the test set. It has the hyperparameters of 3 interaction depth, shrinkage of 0.1. 
